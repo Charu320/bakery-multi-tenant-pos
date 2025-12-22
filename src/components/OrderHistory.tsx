@@ -5,8 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import { Search, Eye, Calendar, Phone, Cake } from "lucide-react";
+import { Search, Eye, Calendar, Phone, Cake, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 interface Order {
   id: string;
@@ -65,14 +67,16 @@ interface OrderDetail {
 
 interface OrderHistoryProps {
   refreshTrigger: number;
+  onOrderDeleted?: () => void;
 }
 
-export const OrderHistory = ({ refreshTrigger }: OrderHistoryProps) => {
+export const OrderHistory = ({ refreshTrigger, onOrderDeleted }: OrderHistoryProps) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<OrderDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchOrders();
@@ -120,6 +124,20 @@ export const OrderHistory = ({ refreshTrigger }: OrderHistoryProps) => {
       setSelectedOrder(data);
     }
     setDetailLoading(false);
+  };
+
+  const handleDeleteOrder = async (orderId: string) => {
+    setDeletingId(orderId);
+    const { error } = await supabase.from("orders").delete().eq("id", orderId);
+    
+    if (error) {
+      toast.error("Failed to delete order");
+    } else {
+      toast.success("Order deleted successfully");
+      fetchOrders();
+      onOrderDeleted?.();
+    }
+    setDeletingId(null);
   };
 
   const filteredOrders = orders.filter(order => {
@@ -226,14 +244,45 @@ export const OrderHistory = ({ refreshTrigger }: OrderHistoryProps) => {
                         </Badge>
                       </td>
                       <td className="px-4 py-4 text-center">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => viewOrderDetails(order.id)}
-                          className="text-gold hover:text-gold-light hover:bg-gold/10"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center justify-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => viewOrderDetails(order.id)}
+                            className="text-gold hover:text-gold-light hover:bg-gold/10"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                disabled={deletingId === order.id}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent className="bg-card border-border">
+                              <AlertDialogHeader>
+                                <AlertDialogTitle className="text-foreground">Delete Order</AlertDialogTitle>
+                                <AlertDialogDescription className="text-muted-foreground">
+                                  Are you sure you want to delete order {order.order_number}? This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel className="bg-secondary border-border text-foreground hover:bg-secondary/80">Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleDeleteOrder(order.id)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
                       </td>
                     </tr>
                   ))}

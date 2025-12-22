@@ -5,8 +5,9 @@ import { OrderForm } from "@/components/OrderForm";
 import { OrderHistory } from "@/components/OrderHistory";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Cake, ClipboardList, History, LogOut, User } from "lucide-react";
+import { ClipboardList, History, LogOut, User } from "lucide-react";
 import { Session } from "@supabase/supabase-js";
+import logo from "@/assets/logo.png";
 
 const Index = () => {
   const [session, setSession] = useState<Session | null>(null);
@@ -58,11 +59,9 @@ const Index = () => {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gold/10 flex items-center justify-center">
-                <Cake className="h-5 w-5 text-gold" />
-              </div>
+              <img src={logo} alt="Royal Live Bakery" className="w-12 h-12 object-contain" />
               <div>
-                <h1 className="text-gold font-display text-xl font-semibold">Royal Cake</h1>
+                <h1 className="text-gold font-display text-xl font-semibold">Royal Live Bakery</h1>
                 <p className="text-muted-foreground text-xs">Order Management</p>
               </div>
             </div>

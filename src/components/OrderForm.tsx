@@ -114,7 +114,9 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
 
   const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
+    // Allow empty string or valid number format
+    const numValue = value === "" ? 0 : parseFloat(value.replace(/[^0-9.]/g, "")) || 0;
+    setFormData(prev => ({ ...prev, [name]: numValue }));
   };
 
   const handleSelectChange = (name: string, value: string) => {

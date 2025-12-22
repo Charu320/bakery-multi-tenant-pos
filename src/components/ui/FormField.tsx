@@ -45,7 +45,8 @@ export const FormField = ({
         <Input
           id={name}
           name={name}
-          type={type}
+          type={type === "number" ? "text" : type}
+          inputMode={type === "number" ? "decimal" : undefined}
           value={value}
           onChange={onChange}
           placeholder={placeholder}

@@ -67,46 +67,91 @@ CREATE TABLE public.orders (
 ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Authenticated users can view all customers" ON public.customers;
+DROP POLICY IF EXISTS "Authenticated users can insert customers" ON public.customers;
+DROP POLICY IF EXISTS "Authenticated users can update customers" ON public.customers;
+DROP POLICY IF EXISTS "Authenticated users can delete customers" ON public.customers;
+
+DROP POLICY IF EXISTS "Authenticated users can view all orders" ON public.orders;
+DROP POLICY IF EXISTS "Authenticated users can insert orders" ON public.orders;
+DROP POLICY IF EXISTS "Authenticated users can update orders" ON public.orders;
+DROP POLICY IF EXISTS "Authenticated users can delete orders" ON public.orders;
+
+
+
+
 -- Create policies for managers (authenticated users)
-CREATE POLICY "Authenticated users can view all customers"
+CREATE POLICY "Manager can view all customers"
 ON public.customers FOR SELECT
 TO authenticated
-USING (true);
+USING (
+  auth.jwt() ->> 'role' = 'manager'
+);
 
-CREATE POLICY "Authenticated users can insert customers"
+CREATE POLICY "Manager can insert customers"
 ON public.customers FOR INSERT
 TO authenticated
-WITH CHECK (true);
+WITH CHECK (
+  auth.jwt() ->> 'role' = 'manager'
+);
 
-CREATE POLICY "Authenticated users can update customers"
+CREATE POLICY "Manager can update customers"
 ON public.customers FOR UPDATE
 TO authenticated
-USING (true);
+USING (
+  auth.jwt() ->> 'role' = 'manager'
+);
 
-CREATE POLICY "Authenticated users can delete customers"
+CREATE POLICY "Manager can delete customers"
 ON public.customers FOR DELETE
 TO authenticated
-USING (true);
+USING (
+  auth.jwt() ->> 'role' = 'manager'
+);
 
-CREATE POLICY "Authenticated users can view all orders"
+CREATE POLICY "Manager and Kitchen can view all orders"
 ON public.orders FOR SELECT
 TO authenticated
-USING (true);
+USING (
+  auth.jwt() ->> 'role' IN ('manager','kitchen')
+  );
 
-CREATE POLICY "Authenticated users can insert orders"
+CREATE POLICY "Manager can insert orders"
 ON public.orders FOR INSERT
 TO authenticated
-WITH CHECK (true);
+WITH CHECK (
+  auth.jwt() ->> 'role' = 'manager'
+);
 
-CREATE POLICY "Authenticated users can update orders"
+CREATE POLICY "Kitchen can update orders"
 ON public.orders FOR UPDATE
 TO authenticated
-USING (true);
+USING (
+  auth.jwt() ->> 'role' = 'kitchen'
+)
+WITH CHECK (
+  auth.jwt() ->> 'role' = 'kitchen');
 
-CREATE POLICY "Authenticated users can delete orders"
+CREATE POLICY "Manager can delete orders"
 ON public.orders FOR DELETE
 TO authenticated
-USING (true);
+USING (
+  auth.jwt() ->> 'role' = 'manager'
+);
+
+-- Allow authenticated users to upload
+CREATE POLICY "Authenticated users can upload cake images"
+ON storage.objects
+FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'cake-images');
+
+-- Allow public read
+CREATE POLICY "Public can read cake images"
+ON storage.objects
+FOR SELECT
+USING (bucket_id = 'cake-images');
 
 -- Create function to update timestamps
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()

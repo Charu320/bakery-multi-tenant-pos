@@ -6,6 +6,10 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Cake, Lock, Mail } from "lucide-react";
+import logo from "@/assets/royal-logo.png";
+
+console.log("Supabase URL:", import.meta.env.VITE_SUPABASE_URL);
+
 
 interface AuthFormProps {
   onSuccess: () => void;
@@ -20,6 +24,13 @@ export const AuthForm = ({ onSuccess }: AuthFormProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    const { data, error } = await supabase.auth.signInWithPassword({
+  email: "your@email.com",
+  password: "yourpassword",
+});
+
+console.log(data, error);
+
 
     try {
       if (isLogin) {
@@ -50,9 +61,10 @@ export const AuthForm = ({ onSuccess }: AuthFormProps) => {
       <Card className="w-full max-w-md bg-card border-border shadow-card">
         <CardHeader className="text-center pb-2">
           <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-gold/10 flex items-center justify-center">
-            <Cake className="h-8 w-8 text-gold" />
+          <img src={logo} alt="Logo" className="w-full h-full object-cover" />
           </div>
-          <CardTitle className="text-gold font-display text-3xl">Royal Cake</CardTitle>
+         
+          <CardTitle className="text-gold font-display text-3xl">Welcome to Royal Live Bakery</CardTitle>
           <p className="text-muted-foreground mt-2">Manager Portal</p>
         </CardHeader>
         <CardContent className="pt-6">
@@ -66,7 +78,7 @@ export const AuthForm = ({ onSuccess }: AuthFormProps) => {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="manager@royalcake.com"
+                  placeholder=""
                   required
                   className="pl-10 bg-secondary border-border text-foreground"
                 />
@@ -81,7 +93,7 @@ export const AuthForm = ({ onSuccess }: AuthFormProps) => {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder=""
                   required
                   minLength={6}
                   className="pl-10 bg-secondary border-border text-foreground"

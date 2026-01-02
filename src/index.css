@@ -122,3 +122,22 @@
     box-shadow: var(--shadow-card);
   }
 }
+/* @keyframes unpaidBlink {
+  0% {
+    box-shadow: 0 0 0px rgba(220, 38, 38, 0.4);
+    background-color: rgba(220, 38, 38, 0.05);
+  }
+  50% {
+    box-shadow: 0 0 15px rgba(220, 38, 38, 0.7);
+    background-color: rgba(220, 38, 38, 0.15);
+  }
+  100% {
+    box-shadow: 0 0 0px rgba(220, 38, 38, 0.4);
+    background-color: rgba(220, 38, 38, 0.05);
+  }
+}
+
+.unpaid-blink {
+  animation: unpaidBlink 1.2s infinite;
+  border: 2px solid rgb(220, 38, 38);
+} */

@@ -7,7 +7,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { Calendar, Cake } from "lucide-react";
 import { Input } from "./ui/input";
-
+import { useRef } from "react";
 
 type OrderStatus = "created" | "pending" | "delivered" | "cancelled";
 
@@ -23,14 +23,37 @@ interface KitchenOrder {
   cake_photo_url: string | null;
   status: OrderStatus;
   created_at: string;
+  kitchen_acknowledged: boolean | null;
 }
 
-const alertSound = new Audio("/sounds/new-order.wav");
+// const alertSound = new Audio("/sounds/new-order.wav");
 
 export default function KitchenOrderScreen() {
   const [orders, setOrders] = useState<KitchenOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState<string>("");
+  const [alarmOn, setAlarmOn] = useState(false);
+  const alertSoundRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    alertSoundRef.current = new Audio("/sounds/kitchen-alarm.mp3");
+    alertSoundRef.current.loop = true;
+  }, []);
+
+  const startAlarm = () => {
+    if (alertSoundRef.current && !alarmOn) {
+      alertSoundRef.current.play().catch(() => {});
+      setAlarmOn(true);
+    }
+  };
+
+  const stopAlarm = () => {
+    if (alertSoundRef.current) {
+      alertSoundRef.current.pause();
+      alertSoundRef.current.currentTime = 0;
+      setAlarmOn(false);
+    }
+  };
 
   useEffect(() => {
     const channel = supabase
@@ -42,16 +65,9 @@ export default function KitchenOrderScreen() {
           schema: "public",
           table: "orders",
         },
-        (payload) => {
-          console.log("Realtime change:", payload);
-
-          // Play alert only for new orders
-          if (payload.eventType === "INSERT") {
-            alertSound.play().catch(() => {});
-          }
-
+        () => {
           // Refresh kitchen orders
-          fetchKitchenOrders();
+          startAlarm();
         }
       )
       .subscribe();
@@ -60,6 +76,10 @@ export default function KitchenOrderScreen() {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  const unacknowledgedOrders = orders.filter(
+    (o) => o.status !== "delivered" && o.kitchen_acknowledged === false
+  );
 
   useEffect(() => {
     fetchKitchenOrders();
@@ -81,8 +101,8 @@ export default function KitchenOrderScreen() {
         delivery_date,
         cake_photo_url,
         status,
-        created_at
-
+        created_at,
+        kitchen_acknowledged
       `
       )
       .in("status", ["created", "pending"])
@@ -150,16 +170,13 @@ export default function KitchenOrderScreen() {
       delivery.getFullYear() === today.getFullYear()
     );
   };
-  const filteredOrders = orders.filter(order => {
-  if (!filterDate) return true;
+  const filteredOrders = orders.filter((order) => {
+    if (!filterDate) return true;
 
-  if (!order.delivery_date) return false;
+    if (!order.delivery_date) return false;
 
-  return (
-    format(new Date(order.delivery_date), "yyyy-MM-dd") === filterDate
-  );
-});
-
+    return format(new Date(order.delivery_date), "yyyy-MM-dd") === filterDate;
+  });
 
   return (
     <div className="p-6 space-y-6">
@@ -197,6 +214,22 @@ export default function KitchenOrderScreen() {
                   : "border-border"
               }`}
             >
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  const ids = unacknowledgedOrders.map((o) => o.id);
+
+                  await supabase
+                    .from("orders")
+                    .update({ kitchen_acknowledged: true })
+                    .in("id", ids);
+
+                  toast.success("Alarm stopped");
+                }}
+              >
+                🔕 Acknowledge Orders
+              </Button>
+
               <CardHeader className="border-b border-border">
                 <CardTitle className="flex justify-between items-center text-gold">
                   {order.order_number}
@@ -268,13 +301,11 @@ export default function KitchenOrderScreen() {
                       Mark Delivered
                     </Button>
                   )}
-
                   <Button
-                    variant="destructive"
-                    className="w-full"
-                    onClick={() => updateOrderStatus(order.id, "cancelled")}
+                    onClick={stopAlarm}
+                    className="bg-red-600 hover:bg-red-700"
                   >
-                    Cancel
+                    Stop Alarm
                   </Button>
                 </div>
               </CardContent>

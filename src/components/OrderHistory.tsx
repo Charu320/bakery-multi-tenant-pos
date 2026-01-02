@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase as supabaseClient } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { Search, Eye, Calendar, Phone, Cake, Trash2 } from "lucide-react";
 import {
@@ -24,6 +24,12 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { Label } from "@radix-ui/react-label";
+
+export const getUserRole = async (): Promise<string | null> => {
+  const { data } = await supabaseClient.auth.getUser();
+  return data?.user?.user_metadata?.role ?? null;
+};
 
 interface Order {
   id: string;
@@ -31,6 +37,7 @@ interface Order {
   cake_size: string | null;
   flavour: string | null;
   delivery_date: string | null;
+
   delivery_type: string | null;
   delivery_address: string | null;
   occasion_type: string | null;
@@ -38,6 +45,7 @@ interface Order {
   grand_total: number | null;
   status: string | null;
   created_at: string;
+  balance: number | null;
   customers: {
     name: string;
     phone_no: string;
@@ -56,6 +64,7 @@ interface OrderDetail {
   occasion_type: string | null;
   occasion_date: string | null;
   delivery_date: string | null;
+
   cake_photo_url: string | null;
 
   delivery_address: string | null;
@@ -70,9 +79,9 @@ interface OrderDetail {
   grand_total: number | null;
   cash_payment: number | null;
   credit_card_payment: number | null;
-  debit_card_payment: number | null;
+
   online_payment: number | null;
-  other_payment: number | null;
+  free_bill: number | null;
   balance: number | null;
   status: string | null;
   created_at: string;
@@ -102,7 +111,13 @@ export const OrderHistory = ({
   const [detailLoading, setDetailLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showPendingOnly, setShowPendingOnly] = useState(false);
-const [filterDate, setFilterDate] = useState<string>("");
+  const [filterDate, setFilterDate] = useState<string>("");
+  const [showUnpaidOnly, setShowUnpaidOnly] = useState(false);
+  const [role, setRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    getUserRole().then(setRole);
+  }, []);
 
   useEffect(() => {
     fetchOrders();
@@ -110,7 +125,7 @@ const [filterDate, setFilterDate] = useState<string>("");
 
   const fetchOrders = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from("orders")
       .select(
         `
@@ -119,12 +134,14 @@ const [filterDate, setFilterDate] = useState<string>("");
   cake_size,
   flavour,
   delivery_date,
+
   delivery_type,
   delivery_address,
   occasion_type,
   occasion_date,
   grand_total,
   status,
+  balance,
   created_at,
   customers (
     name,
@@ -142,9 +159,11 @@ const [filterDate, setFilterDate] = useState<string>("");
     setLoading(false);
   };
 
+ 
+
   const viewOrderDetails = async (orderId: string) => {
     setDetailLoading(true);
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from("orders")
       .select(
         `
@@ -163,7 +182,10 @@ const [filterDate, setFilterDate] = useState<string>("");
 
   const handleDeleteOrder = async (orderId: string) => {
     setDeletingId(orderId);
-    const { error } = await supabase.from("orders").delete().eq("id", orderId);
+    const { error } = await supabaseClient
+      .from("orders")
+      .delete()
+      .eq("id", orderId);
 
     if (error) {
       toast.error("Failed to delete order");
@@ -176,48 +198,61 @@ const [filterDate, setFilterDate] = useState<string>("");
   };
 
   const isTodayDelivery = (deliveryDate?: string | null) => {
-  if (!deliveryDate) return false;
+    if (!deliveryDate) return false;
 
-  const today = new Date();
-  const delivery = new Date(deliveryDate);
+    const today = new Date();
+    const delivery = new Date(deliveryDate);
 
-  return (
-    delivery.getDate() === today.getDate() &&
-    delivery.getMonth() === today.getMonth() &&
-    delivery.getFullYear() === today.getFullYear()
+    return (
+      delivery.getDate() === today.getDate() &&
+      delivery.getMonth() === today.getMonth() &&
+      delivery.getFullYear() === today.getFullYear()
+    );
+  };
+
+  const filteredOrders = orders.filter((order) => {
+    const searchLower = searchTerm.toLowerCase();
+// search term match
+    const matchesSearch =
+      order.order_number?.toLowerCase().includes(searchLower) ||
+      order.customers?.name?.toLowerCase().includes(searchLower) ||
+      order.customers?.phone_no?.includes(searchTerm);
+  
+      // pending status match
+    const matchesStatus = showPendingOnly
+      ? order.status === "pending"
+      : true;
+
+      // date filter match
+    const matchesDate = filterDate
+      ? format(new Date(order.created_at), "yyyy-MM-dd") === filterDate
+      : true;
+
+      // unpaid balance match
+      const matchesUnpaid = showUnpaidOnly
+      ? (order as any).balance > 0 && order.status !== "cancelled"
+      : true;
+
+    return matchesSearch && matchesStatus && matchesDate && matchesUnpaid;
+  });
+
+  useEffect(() => {
+  if (showPendingOnly) {
+    setShowUnpaidOnly(false);
+  }
+}, [showPendingOnly]);
+
+
+  // 🔥 PIN TODAY’S DELIVERY ORDERS ON TOP
+  const todayOrders = filteredOrders.filter((order) =>
+    isTodayDelivery(order.delivery_date)
   );
-};
 
+  const otherOrders = filteredOrders.filter(
+    (order) => !isTodayDelivery(order.delivery_date)
+  );
 
-  const filteredOrders = orders.filter(order => {
-  const searchLower = searchTerm.toLowerCase();
-
-  const matchesSearch =
-    order.order_number?.toLowerCase().includes(searchLower) ||
-    order.customers?.name?.toLowerCase().includes(searchLower) ||
-    order.customers?.phone_no?.includes(searchTerm);
-
-  const matchesStatus = showPendingOnly
-    ? order.status === "pending"
-    : true;
-
-  const matchesDate = filterDate
-    ? format(new Date(order.created_at), "yyyy-MM-dd") === filterDate
-    : true;
-
-  return matchesSearch && matchesStatus && matchesDate;
-});
-
-// 🔥 PIN TODAY’S DELIVERY ORDERS ON TOP
-  const todayOrders = filteredOrders.filter(order =>
-  isTodayDelivery(order.delivery_date)
-);
-
-const otherOrders = filteredOrders.filter(order =>
-  !isTodayDelivery(order.delivery_date)
-);
-
-const sortedOrders = [...todayOrders, ...otherOrders];
+  const sortedOrders = [...todayOrders, ...otherOrders];
 
   const getStatusColor = (status: string | null) => {
     switch (status) {
@@ -234,7 +269,9 @@ const sortedOrders = [...todayOrders, ...otherOrders];
 
   return (
     <>
-      <Card className="bg-card border-border shadow-card">
+      <Card
+        className="w-full bg-card border-border"
+      >
         <CardHeader className="border-b border-border">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <CardTitle className="text-gold font-display text-2xl">
@@ -250,18 +287,23 @@ const sortedOrders = [...todayOrders, ...otherOrders];
               />
             </div>
             <Input
-  type="date"
-  value={filterDate}
-  onChange={(e) => setFilterDate(e.target.value)}
-  className="bg-secondary border-border w-40"
- />
-<Button
-  variant="ghost"
-  size="sm"
-  onClick={() => setFilterDate("")}
->
-  Clear
-</Button>
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="bg-secondary border-border w-40"
+            />
+            <Button variant="ghost" size="sm" onClick={() => setFilterDate("")}>
+              Clear
+            </Button>
+            {/* <Label className="flex items-center gap-2 mb-1">
+              <Input
+                type="checkbox"
+                checked={showPendingOnly}
+                onChange={(e) => setShowPendingOnly(e.target.checked)}
+                className="accent-red-600"
+              />
+             Pending Balance Orders
+            </Label> */}
 
             <div className="flex items-center gap-2">
               <Button
@@ -273,6 +315,14 @@ const sortedOrders = [...todayOrders, ...otherOrders];
                 Pending Only
               </Button>
             </div>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={showUnpaidOnly}
+                onChange={(e) => setShowUnpaidOnly(e.target.checked)}
+              />
+              Show unpaid orders only
+            </label>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -327,25 +377,32 @@ const sortedOrders = [...todayOrders, ...otherOrders];
                   {sortedOrders.map((order, index) => (
                     <tr
                       key={order.id}
-                      className="border-b border-border/50 hover:bg-secondary/20 transition-colors"
+                      className={`border-b transition-colors ${
+                        (order as any).balance > 0 &&
+                        order.status !== "cancelled"
+                          ? "blink-unpaid"
+                          : "border-border/50 hover:bg-secondary/20"
+                      }`}
                       style={{ animationDelay: `${index * 50}ms` }}
                     >
                       <td className="px-4 py-4">
-  <div className="flex items-center gap-2">
-    <span className="font-medium">{order.order_number}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">
+                            {order.order_number}
+                          </span>
 
-    {/* {isTodayDelivery(order.delivery_date) && (
+                          {/* {isTodayDelivery(order.delivery_date) && (
      <span className="bg-yellow-300 text-black text-xs font-bold px-3 py-1 rounded-sm rotate-[-2deg] shadow-md">
   📌 TODAY
 </span>
 
     )} */}
-  </div>
+                        </div>
 
-  <div className="text-muted-foreground text-xs mt-1">
-    {format(new Date(order.created_at), "dd MMM yyyy")}
-  </div>
-</td>
+                        <div className="text-muted-foreground text-xs mt-1">
+                          {format(new Date(order.created_at), "dd MMM yyyy")}
+                        </div>
+                      </td>
 
                       <td className="px-4 py-4">
                         <div className="text-foreground">
@@ -367,8 +424,8 @@ const sortedOrders = [...todayOrders, ...otherOrders];
                           {order.cake_size || "—"}
                         </div>
                       </td>
-                      
-                    <td className="px-4 py-4 lg:table-cell">
+
+                      <td className="px-4 py-4 lg:table-cell">
                         <span className="text-gold font-semibold">
                           {order.delivery_address}
                         </span>
@@ -403,7 +460,6 @@ const sortedOrders = [...todayOrders, ...otherOrders];
                                 "dd MMM yyyy, hh:mm a"
                               )}
                             </div>
-                           
                           </>
                         ) : (
                           <span className="text-muted-foreground">—</span>
@@ -432,41 +488,43 @@ const sortedOrders = [...todayOrders, ...otherOrders];
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                disabled={deletingId === order.id}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent className="bg-card border-border">
-                              <AlertDialogHeader>
-                                <AlertDialogTitle className="text-foreground">
-                                  Delete Order
-                                </AlertDialogTitle>
-                                <AlertDialogDescription className="text-muted-foreground">
-                                  Are you sure you want to delete order{" "}
-                                  {order.order_number}? This action cannot be
-                                  undone.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel className="bg-secondary border-border text-foreground hover:bg-secondary/80">
-                                  Cancel
-                                </AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => handleDeleteOrder(order.id)}
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          {role === "admin" && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  disabled={deletingId === order.id}
                                 >
-                                  Delete
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent className="bg-card border-border">
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle className="text-foreground">
+                                    Delete Order
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription className="text-muted-foreground">
+                                    Are you sure you want to delete order{" "}
+                                    {order.order_number}? This action cannot be
+                                    undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel className="bg-secondary border-border text-foreground hover:bg-secondary/80">
+                                    Cancel
+                                  </AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDeleteOrder(order.id)}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -482,7 +540,15 @@ const sortedOrders = [...todayOrders, ...otherOrders];
         open={!!selectedOrder}
         onOpenChange={() => setSelectedOrder(null)}
       >
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-card border-border">
+        <DialogContent
+          className={`max-w-3xl max-h-[90vh] overflow-y-auto bg-card border-border ${
+            selectedOrder &&
+            (selectedOrder as any).balance > 0 &&
+            selectedOrder.status !== "cancelled"
+              ? "blink-unpaid"
+              : ""
+          }`}
+        >
           <DialogHeader>
             <DialogTitle className="text-gold font-display text-2xl">
               Order Details - {selectedOrder?.order_number}

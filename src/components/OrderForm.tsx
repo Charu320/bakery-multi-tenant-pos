@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Calendar, Cake, CreditCard, Truck, User } from "lucide-react";
+import { useAppSettings } from "../lib/useAppSettings";
 
 /* ================= TYPES ================= */
 
@@ -53,9 +54,8 @@ interface OrderFormData {
 
   cash_payment: string;
   credit_card_payment: string;
-  debit_card_payment: string;
   online_payment: string;
-  other_payment: string;
+  free_bill: string;
   balance: number;
 }
 
@@ -79,7 +79,7 @@ const initialFormData: OrderFormData = {
   occasion_date: "",
   other_menu: "",
 
-  delivery_date: new Date().toISOString().slice(0, 16),
+  delivery_date: new Date().toISOString().slice(0, 16), 
   delivery_address: "",
   delivery_type: "",
   same_as_customer_address: false,
@@ -91,15 +91,14 @@ const initialFormData: OrderFormData = {
   discount_percentage: "",
 
   after_discount: 0,
-  tax_percentage: 5,
+  tax_percentage: 0,
   tax_value: 0,
   grand_total: 0,
 
   cash_payment: "",
   credit_card_payment: "",
-  debit_card_payment: "",
   online_payment: "",
-  other_payment: "",
+  free_bill: "",
   balance: 0,
 };
 
@@ -127,7 +126,7 @@ const flavours = [
 ];
 
 interface OrderFormProps {
-  onOrderCreated: () => void;
+  onOrderCreated?: () => void;
 }
 
 /* ================= COMPONENT ================= */
@@ -137,6 +136,7 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [cakeImage, setCakeImage] = useState<File | null>(null);
   const [cakeImagePreview, setCakeImagePreview] = useState<string | null>(null);
+  const { settings, loading: gstLoading } = useAppSettings();
 
   /* ---------- INPUT HANDLERS ---------- */
 
@@ -176,18 +176,24 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
     const subtotal = total + delivery;
     const discountAmount = subtotal * (discountPercent / 100);
     const afterDiscount = subtotal - discountAmount;
+
+    let taxPercent = 0;
+    if (settings?.gst_enabled) {
+      taxPercent = settings.gst_percentage;
+    }
+
     const taxValue = afterDiscount * (formData.tax_percentage / 100);
     const grandTotal = afterDiscount + taxValue;
 
     const totalPaid =
       Number(formData.cash_payment || 0) +
       Number(formData.credit_card_payment || 0) +
-      Number(formData.debit_card_payment || 0) +
       Number(formData.online_payment || 0) +
-      Number(formData.other_payment || 0);
+      Number(formData.free_bill || 0);
 
     setFormData((prev) => ({
       ...prev,
+      tax_percentage: taxPercent,
       after_discount: afterDiscount,
       tax_value: taxValue,
       grand_total: grandTotal,
@@ -199,11 +205,13 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
     formData.discount_percentage,
     formData.cash_payment,
     formData.credit_card_payment,
-    formData.debit_card_payment,
     formData.online_payment,
-    formData.other_payment,
+    formData.free_bill,
+    settings,
   ]);
 
+
+  
   /* ---------- VALIDATION ---------- */
 
   const validateForm = () => {
@@ -319,9 +327,8 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
         grand_total: formData.grand_total,
         cash_payment: Number(formData.cash_payment),
         credit_card_payment: Number(formData.credit_card_payment),
-        debit_card_payment: Number(formData.debit_card_payment),
         online_payment: Number(formData.online_payment),
-        other_payment: Number(formData.other_payment),
+        free_bill: Number(formData.free_bill),
         balance: formData.balance,
       });
 
@@ -405,12 +412,12 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
             <CardContent className="pt-4 space-y-4">
               <div className="space-y-2">
                 <FormField
-                label="Cake Size"
-                name="cake_size"
-                value={formData.cake_size}
-                onChange={handleInputChange}
-                required
-              />
+                  label="Cake Size"
+                  name="cake_size"
+                  value={formData.cake_size}
+                  onChange={handleInputChange}
+                  required
+                />
               </div>
               <div className="space-y-2">
                 <Label className="text-gold-light text-sm font-medium">
@@ -439,7 +446,7 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
                 value={formData.cake_description}
                 onChange={handleInputChange}
                 textarea
-               
+                required
               />
               <FormField
                 label="Message on Cake"
@@ -455,77 +462,6 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
                 onChange={handleInputChange}
                 required
               />
-              <div className="space-y-3">
-                <Label className="text-gold-light text-sm font-medium">
-                  Cake Image
-                </Label>
-
-                {/* If no image selected */}
-                {!cakeImagePreview && (
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-
-                      setCakeImage(file);
-                      setCakeImagePreview(URL.createObjectURL(file));
-                    }}
-                  />
-                )}
-
-                {/* Preview */}
-                {cakeImagePreview && (
-                  <div className="space-y-3">
-                    <img
-                      src={cakeImagePreview}
-                      alt="Cake Preview"
-                      className="h-40 w-40 object-cover rounded-md border"
-                    />
-
-                    <div className="flex gap-2">
-                      {/* Change */}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() =>
-                          document.getElementById("cake-image-input")?.click()
-                        }
-                      >
-                        Change Image
-                      </Button>
-
-                      {/* Remove */}
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        onClick={() => {
-                          setCakeImage(null);
-                          setCakeImagePreview(null);
-                        }}
-                      >
-                        Remove Image
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Hidden input for change */}
-                <input
-                  id="cake-image-input"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-
-                    setCakeImage(file);
-                    setCakeImagePreview(URL.createObjectURL(file));
-                  }}
-                />
-              </div>
             </CardContent>
           </Card>
         </div>
@@ -548,6 +484,8 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
                 onChange={handleInputChange}
                 required
               />
+             
+
               <div className="space-y-2">
                 <Label className="text-gold-light text-sm font-medium">
                   Delivery Type
@@ -653,6 +591,77 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
                 onChange={handleInputChange}
                 textarea
               />
+              <div className="space-y-3">
+                <Label className="text-gold-light text-sm font-medium">
+                  Cake Image
+                </Label>
+
+                {/* If no image selected */}
+                {!cakeImagePreview && (
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+
+                      setCakeImage(file);
+                      setCakeImagePreview(URL.createObjectURL(file));
+                    }}
+                  />
+                )}
+
+                {/* Preview */}
+                {cakeImagePreview && (
+                  <div className="space-y-3">
+                    <img
+                      src={cakeImagePreview}
+                      alt="Cake Preview"
+                      className="h-40 w-40 object-cover rounded-md border"
+                    />
+
+                    <div className="flex gap-2">
+                      {/* Change */}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() =>
+                          document.getElementById("cake-image-input")?.click()
+                        }
+                      >
+                        Change Image
+                      </Button>
+
+                      {/* Remove */}
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={() => {
+                          setCakeImage(null);
+                          setCakeImagePreview(null);
+                        }}
+                      >
+                        Remove Image
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Hidden input for change */}
+                <input
+                  id="cake-image-input"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+
+                    setCakeImage(file);
+                    setCakeImagePreview(URL.createObjectURL(file));
+                  }}
+                />
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -711,9 +720,19 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">
+                  {/* <span className="text-muted-foreground">
                     Tax ({formData.tax_percentage}%)
-                  </span>
+                  </span> */}
+                  {settings?.gst_enabled ? (
+                    <p className="text-sm text-muted-foreground">
+                      GST Applied: {settings.gst_percentage}%
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      GST Disabled
+                    </p>
+                  )}
+
                   <span className="text-foreground">
                     ₹{formData.tax_value.toFixed(2)}
                   </span>
@@ -753,15 +772,7 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
                 value={formData.credit_card_payment}
                 onChange={handleNumberChange}
               />
-              <FormField
-                label="Debit Card"
-                name="debit_card_payment"
-                type="text"
-                inputMode="decimal"
-                pattern="[0-9.]*"
-                value={formData.debit_card_payment}
-                onChange={handleNumberChange}
-              />
+
               <FormField
                 label="Online"
                 name="online_payment"
@@ -772,12 +783,12 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
                 onChange={handleNumberChange}
               />
               <FormField
-                label="Other"
-                name="other_payment"
+                label="Free Bill"
+                name="free_bill"
                 type="text"
                 inputMode="decimal"
                 pattern="[0-9.]*"
-                value={formData.other_payment}
+                value={formData.free_bill}
                 onChange={handleNumberChange}
               />
               <div className="bg-maroon/20 rounded-lg p-3">

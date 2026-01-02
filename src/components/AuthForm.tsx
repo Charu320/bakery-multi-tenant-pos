@@ -12,7 +12,8 @@ console.log("Supabase URL:", import.meta.env.VITE_SUPABASE_URL);
 
 
 interface AuthFormProps {
-  onSuccess: () => void;
+  onSuccess?: () => void;
+  
 }
 
 export const AuthForm = ({ onSuccess }: AuthFormProps) => {

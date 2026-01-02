@@ -40,3 +40,19 @@
 .read-the-docs {
   color: #888;
 }
+
+/* @keyframes blink-unpaid {
+  0%, 49% {
+    background-color: rgba(220, 38, 38, 0.08);
+    border-left-color: rgb(220, 38, 38);
+  }
+  50%, 100% {
+    background-color: rgba(239, 68, 68, 0.15);
+    border-left-color: rgb(239, 68, 68);
+  }
+}
+
+.blink-unpaid {
+  animation: blink-unpaid 1.2s infinite;
+  border-left: 4px solid rgb(220, 38, 38) !important;
+} */

@@ -63,11 +63,11 @@ export type Database = {
           created_at: string
           credit_card_payment: number | null
           customer_id: string
-          debit_card_payment: number | null
           delivery_address: string | null
           delivery_charge: number | null
           delivery_city: string | null
           delivery_date: string | null
+         
           delivery_type: string | null
           discount_percentage: number | null
           flavour: string | null
@@ -79,7 +79,7 @@ export type Database = {
           online_payment: number | null
           order_number: string
           other_menu: string | null
-          other_payment: number | null
+          free_bill: number | null
           same_as_customer_address: boolean | null
           status: string | null
           tax_extra_no: string | null
@@ -87,6 +87,7 @@ export type Database = {
           tax_value: number | null
           total_amount: number | null
           updated_at: string
+          kitchen_acknowledged: boolean | null
         }
         Insert: {
           after_discount?: number | null
@@ -100,11 +101,11 @@ export type Database = {
           created_at?: string
           credit_card_payment?: number | null
           customer_id: string
-          debit_card_payment?: number | null
           delivery_address?: string | null
           delivery_charge?: number | null
           delivery_city?: string | null
           delivery_date?: string | null
+        
           delivery_type?: string | null
           discount_percentage?: number | null
           flavour?: string | null
@@ -116,7 +117,7 @@ export type Database = {
           online_payment?: number | null
           order_number: string
           other_menu?: string | null
-          other_payment?: number | null
+          free_bill?: number | null
           same_as_customer_address?: boolean | null
           status?: string | null
           tax_extra_no?: string | null
@@ -124,6 +125,7 @@ export type Database = {
           tax_value?: number | null
           total_amount?: number | null
           updated_at?: string
+          kitchen_acknowledged?: boolean | null
         }
         Update: {
           after_discount?: number | null
@@ -137,11 +139,11 @@ export type Database = {
           created_at?: string
           credit_card_payment?: number | null
           customer_id?: string
-          debit_card_payment?: number | null
           delivery_address?: string | null
           delivery_charge?: number | null
           delivery_city?: string | null
           delivery_date?: string | null
+         
           delivery_type?: string | null
           discount_percentage?: number | null
           flavour?: string | null
@@ -153,7 +155,7 @@ export type Database = {
           online_payment?: number | null
           order_number?: string
           other_menu?: string | null
-          other_payment?: number | null
+          free_bill?: number | null
           same_as_customer_address?: boolean | null
           status?: string | null
           tax_extra_no?: string | null
@@ -161,6 +163,7 @@ export type Database = {
           tax_value?: number | null
           total_amount?: number | null
           updated_at?: string
+          kitchen_acknowledged?: boolean | null
         }
         Relationships: [
           {
@@ -171,6 +174,84 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      app_settings: {
+        Row: {
+          id: string
+          key: string
+          value: string | null
+          gst_enabled:boolean
+          gst_percentage:number| null
+          updated_at: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id: string
+          key: string
+          value?: string | null
+          gst_enabled?:boolean
+          gst_percentage:number| null
+          updated_at?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          key?: string
+          value?: string | null
+          gst_enabled?:boolean
+          gst_percentage?:number| null
+          updated_at?: string | null
+          created_at?: string | null
+        }
+        Relationships: []
+      }
+      user_profiles: {
+        Row: {
+          created_at: string | null
+          id: string
+          outlet_id: string | null
+          role: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id: string
+          outlet_id?: string | null
+          role?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          outlet_id?: string | null
+          role?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      outlets:{
+        Row: {
+          created_at: string | null
+          id: string
+          name: string | null
+          city:string|null
+          updated_at: string | null
+      }
+      Insert: {
+        created_at?: string | null
+        id:string
+        name?: string | null
+        city?:string|null
+        updated_at?: string | null
+    }
+    Update: {
+      created_at?: string | null
+      id?:string
+      name?: string | null  
+      city?:string|null
+      updated_at?: string | null
+  }
+  Relationships: []
       }
     }
     Views: {
@@ -201,7 +282,7 @@ export type Tables<
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

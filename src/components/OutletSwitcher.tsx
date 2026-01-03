@@ -1,39 +1,36 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAdminOutlet } from "@/context/AdminOutletContext";
+import { useAdminOutlet } from "@/lib/useAdminOutlet";
+import { Building2 } from "lucide-react";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
-export const OutletSwitcher = () => {
-  const { selectedOutlet, setSelectedOutlet } = useAdminOutlet();
-  const [outlets, setOutlets] = useState<any[]>([]);
+export const AdminOutletSwitcher = () => {
+  const { outlets, selectedOutlet, setSelectedOutlet, loading } =
+    useAdminOutlet();
 
-  useEffect(() => {
-    supabase.from("outlets").select("*").then(({ data }) => {
-      if (data) {
-        setOutlets(data);
-        if (!selectedOutlet) setSelectedOutlet(data[0]); // default
-      }
-    });
-  }, []);
+  if (loading || !selectedOutlet) return null;
 
   return (
-    <Select
-      value={selectedOutlet?.id}
-      onValueChange={(id) => {
-        const outlet = outlets.find(o => o.id === id);
-        if (outlet) setSelectedOutlet(outlet);
-      }}
-    >
-      <SelectTrigger className="w-64">
-        <SelectValue placeholder="Select Outlet" />
-      </SelectTrigger>
-      <SelectContent>
-        {outlets.map(outlet => (
-          <SelectItem key={outlet.id} value={outlet.id}>
-            {outlet.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className="flex items-center gap-2">
+      <Building2 className="h-4 w-4 text-gold" />
+      <Select
+        value={selectedOutlet.id}
+        onValueChange={(id) => {
+          const outlet = outlets.find((o) => o.id === id);
+          if (outlet) setSelectedOutlet(outlet);
+        }}
+      >
+        <SelectTrigger className="w-56 bg-secondary border-border">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {outlets.map((outlet) => (
+            <SelectItem key={outlet.id} value={outlet.id}>
+              {outlet.name} {outlet.city ? `(${outlet.city})` : ""}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 };

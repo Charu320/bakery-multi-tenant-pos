@@ -25,6 +25,8 @@ export type Database = {
           name: string
           phone_no: string
           updated_at: string
+          outlet_id: string | null
+          customer_id: string | null
         }
         Insert: {
           address?: string | null
@@ -36,6 +38,8 @@ export type Database = {
           name: string
           phone_no: string
           updated_at?: string
+          outlet_id?: string | null
+          customer_id?: string | null
         }
         Update: {
           address?: string | null
@@ -47,6 +51,8 @@ export type Database = {
           name?: string
           phone_no?: string
           updated_at?: string
+          outlet_id?: string | null
+          customer_id?: string | null
         }
         Relationships: []
       }
@@ -88,6 +94,7 @@ export type Database = {
           total_amount: number | null
           updated_at: string
           kitchen_acknowledged: boolean | null
+          outlet_id: string | null
         }
         Insert: {
           after_discount?: number | null
@@ -126,6 +133,7 @@ export type Database = {
           total_amount?: number | null
           updated_at?: string
           kitchen_acknowledged?: boolean | null
+          outlet_id?: string | null
         }
         Update: {
           after_discount?: number | null
@@ -164,6 +172,7 @@ export type Database = {
           total_amount?: number | null
           updated_at?: string
           kitchen_acknowledged?: boolean | null
+          outlet_id?: string | null
         }
         Relationships: [
           {

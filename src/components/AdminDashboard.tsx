@@ -7,6 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import AdminDashboardHeader from "./AdminDashboardHeader";
 import {
   Select,
   SelectContent,
@@ -36,8 +37,8 @@ import {
 import KitchenOrderScreen from "./KitchenOrderScreen";
 import { OrderHistory } from "./OrderHistory";
 import { Database } from "@/integrations/supabase/types";
-import { useAdminOutlet } from "@/context/AdminOutletContext";
-
+import { useAdminOutlet } from "@/lib/useAdminOutlet";
+import { AdminOutletProvider } from "@/context/AdminOutletContext";
 /* ================= TYPES ================= */
 
 type AppSettings = {
@@ -321,8 +322,10 @@ const AdminDashboard = () => {
   /* ================= UI ================= */
 
   return (
+    <AdminOutletProvider>
     <div className="p-6 space-y-6">
-      <h1 className="text-3xl font-bold text-gold">Admin Dashboard</h1>
+     <AdminDashboardHeader/>
+
 
       <Tabs defaultValue="sales" className="w-full">
         <TabsList className="grid grid-cols-4 w-full">
@@ -493,7 +496,9 @@ const AdminDashboard = () => {
           <OrderHistory refreshTrigger={0} />
         </TabsContent>
       </Tabs>
+     
     </div>
+    </AdminOutletProvider>
   );
 };
 

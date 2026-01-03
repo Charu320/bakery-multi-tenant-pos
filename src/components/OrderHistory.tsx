@@ -3,7 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { supabase as supabaseClient } from "@/integrations/supabase/client";
+import {
+  supabase,
+  supabase as supabaseClient,
+} from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { Search, Eye, Calendar, Phone, Cake, Trash2 } from "lucide-react";
 import {
@@ -23,8 +26,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { printHtml } from "@/lib/print";
+import { billReceiptHTML, detailSlipHTML } from "@/lib/receiptTemplate";
 import { toast } from "sonner";
 import { Label } from "@radix-ui/react-label";
+import { AdminOutletProvider } from "@/context/AdminOutletContext";
+import { fetchOrdersByOutlet, AdminOrder } from "@/lib/fetchOutlets";
 
 export const getUserRole = async (): Promise<string | null> => {
   const { data } = await supabaseClient.auth.getUser();
@@ -159,8 +166,6 @@ export const OrderHistory = ({
     setLoading(false);
   };
 
- 
-
   const viewOrderDetails = async (orderId: string) => {
     setDetailLoading(true);
     const { data, error } = await supabaseClient
@@ -212,24 +217,22 @@ export const OrderHistory = ({
 
   const filteredOrders = orders.filter((order) => {
     const searchLower = searchTerm.toLowerCase();
-// search term match
+    // search term match
     const matchesSearch =
       order.order_number?.toLowerCase().includes(searchLower) ||
       order.customers?.name?.toLowerCase().includes(searchLower) ||
       order.customers?.phone_no?.includes(searchTerm);
-  
-      // pending status match
-    const matchesStatus = showPendingOnly
-      ? order.status === "pending"
-      : true;
 
-      // date filter match
+    // pending status match
+    const matchesStatus = showPendingOnly ? order.status === "pending" : true;
+
+    // date filter match
     const matchesDate = filterDate
       ? format(new Date(order.created_at), "yyyy-MM-dd") === filterDate
       : true;
 
-      // unpaid balance match
-      const matchesUnpaid = showUnpaidOnly
+    // unpaid balance match
+    const matchesUnpaid = showUnpaidOnly
       ? (order as any).balance > 0 && order.status !== "cancelled"
       : true;
 
@@ -237,11 +240,10 @@ export const OrderHistory = ({
   });
 
   useEffect(() => {
-  if (showPendingOnly) {
-    setShowUnpaidOnly(false);
-  }
-}, [showPendingOnly]);
-
+    if (showPendingOnly) {
+      setShowUnpaidOnly(false);
+    }
+  }, [showPendingOnly]);
 
   // 🔥 PIN TODAY’S DELIVERY ORDERS ON TOP
   const todayOrders = filteredOrders.filter((order) =>
@@ -269,9 +271,7 @@ export const OrderHistory = ({
 
   return (
     <>
-      <Card
-        className="w-full bg-card border-border"
-      >
+      <Card className="w-full bg-card border-border">
         <CardHeader className="border-b border-border">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <CardTitle className="text-gold font-display text-2xl">
@@ -486,6 +486,21 @@ export const OrderHistory = ({
                             onClick={() => viewOrderDetails(order.id)}
                             className="text-gold hover:text-gold-light hover:bg-gold/10"
                           >
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => printHtml(billReceiptHTML(order))}
+                            >
+                              Print Bill
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => printHtml(detailSlipHTML(order))}
+                            >
+                              Print Slip
+                            </Button>
                             <Eye className="h-4 w-4" />
                           </Button>
                           {role === "admin" && (

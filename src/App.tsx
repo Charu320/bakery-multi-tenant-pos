@@ -5,13 +5,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
-// import AdminGuard from "./components/AdminGuard";
 import AdminDashboard from "./components/AdminDashboard";
 import { AuthForm } from "./components/AuthForm";
 import KitchenOrderScreen from "./components/KitchenOrderScreen";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { OrderForm } from "./components/OrderForm";
-
+import { AdminOutletProvider } from "./context/AdminOutletContext";
 
 const queryClient = new QueryClient();
 
@@ -23,14 +22,15 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
-          <Route path="/login" element={<AuthForm />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
+          <Route path="/login" element={<AuthForm onSuccess={() =>window.location.replace("/")}/>}  />
+{/* Admin Only */}
             <Route
         path="/admin"
         element={
-          <ProtectedRoute allow={["admin", "manager"]}>
-            <AdminDashboard />
+          <ProtectedRoute allow={["admin"]}>
+            <AdminOutletProvider>
+           <AdminDashboard />
+           </AdminOutletProvider>
           </ProtectedRoute>
         }
       />
@@ -52,6 +52,7 @@ const App = () => (
           </ProtectedRoute>
         }
         />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>

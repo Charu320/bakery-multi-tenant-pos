@@ -3,6 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/FormField";
+import { billReceiptHTML, detailSlipHTML } from "@/lib/receiptTemplate";
+import { printHtml } from "@/lib/print";
+
 import {
   Select,
   SelectContent,
@@ -15,6 +18,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Calendar, Cake, CreditCard, Truck, User } from "lucide-react";
 import { useAppSettings } from "../lib/useAppSettings";
+import { useAdminOutlet } from "@/lib/useAdminOutlet";
+import { useAdminOutletContext } from "@/context/AdminOutletContext";
+import { set } from "date-fns";
 
 /* ================= TYPES ================= */
 
@@ -129,6 +135,8 @@ interface OrderFormProps {
   onOrderCreated?: () => void;
 }
 
+
+
 /* ================= COMPONENT ================= */
 
 export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
@@ -137,7 +145,7 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
   const [cakeImage, setCakeImage] = useState<File | null>(null);
   const [cakeImagePreview, setCakeImagePreview] = useState<string | null>(null);
   const { settings, loading: gstLoading } = useAppSettings();
-
+  const { selectedOutlet } = useAdminOutlet();
   /* ---------- INPUT HANDLERS ---------- */
 
   const handleInputChange = (
@@ -228,9 +236,13 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+  //  validation
     if (!validateForm()) return;
 
     const { data: auth } = await supabase.auth.getUser();
+
+    // Auth check
 
     if (!auth.user) {
       toast.error("You must be logged in to upload images");
@@ -238,46 +250,8 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
       return;
     }
 
-    setIsSubmitting(true);
-    const { data: existingCustomer } = await supabase
-      .from("customers")
-      .select("id")
-      .eq("phone_no", formData.phone_no)
-      .maybeSingle();
-
-    let customerId: string;
-
-    if (existingCustomer) {
-      customerId = existingCustomer.id;
-
-      await supabase
-        .from("customers")
-        .update({
-          name: formData.name,
-          gst_no: formData.gst_no || null,
-          email: formData.email || null,
-          address: formData.address || null,
-          city: formData.city || null,
-        })
-        .eq("id", customerId);
-    } else {
-      const { data: newCustomer, error } = await supabase
-        .from("customers")
-        .insert({
-          phone_no: formData.phone_no,
-          name: formData.name,
-          gst_no: formData.gst_no || null,
-          email: formData.email || null,
-          address: formData.address || null,
-          city: formData.city || null,
-        })
-        .select("id")
-        .single();
-
-      if (error) throw error;
-      customerId = newCustomer.id;
-    }
-    let cakePhotoUrl: string | null = null;
+    // cake
+      let cakePhotoUrl: string | null = null;
 
     if (cakeImage) {
       const fileExt = cakeImage.name.split(".").pop();
@@ -296,53 +270,101 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
       cakePhotoUrl = data.publicUrl;
     }
 
-    try {
-      const { error: orderError } = await supabase.from("orders").insert({
-        order_number: `ORD-${Date.now()}`,
-        customer_id: customerId,
+    // Outlet check
 
-        cake_size: formData.cake_size || null,
-        flavour: formData.flavour || null,
-        cake_description: formData.cake_description || null,
-        message_on_cake: formData.message_on_cake || null,
-        cake_color: formData.cake_color || null,
-        cake_photo_url: cakePhotoUrl,
+    if(!selectedOutlet?.id){
+      toast.error("Please select an outlet before creating an order");
+      return;
+    }
+    setIsSubmitting(true);
 
-        occasion_type: formData.occasion_type || null,
-        occasion_date: formData.occasion_date || null,
-        other_menu: formData.other_menu || null,
-        delivery_date: formData.delivery_date,
-        same_as_customer_address: formData.same_as_customer_address,
-        delivery_address: formData.delivery_address || null,
-        delivery_type: formData.delivery_type || null,
-        delivery_city: formData.delivery_city || null,
+    try{
+      const {data: existingCustomer}= await supabase
+      .from("customers")
+      .select("id")
+      .eq("phone_no", formData.phone_no)
+      .maybeSingle();
 
-        total_amount: Number(formData.total_amount),
-        coupon_code: formData.coupon_code || null,
-        delivery_charge: Number(formData.delivery_charge),
-        discount_percentage: Number(formData.discount_percentage),
-        after_discount: formData.after_discount,
-        tax_percentage: formData.tax_percentage,
-        tax_value: formData.tax_value,
-        grand_total: formData.grand_total,
-        cash_payment: Number(formData.cash_payment),
-        credit_card_payment: Number(formData.credit_card_payment),
-        online_payment: Number(formData.online_payment),
-        free_bill: Number(formData.free_bill),
-        balance: formData.balance,
-      });
+      let customerId: string;
+      if(existingCustomer){
+        customerId= existingCustomer.id;
+      }else{
+        const {data: newCustomer, error}= await supabase
+        .from("customers")
+        .insert({
+          phone_no: formData.phone_no,
+          name: formData.name,
+          email: formData.email || null,
+          address: formData.address || null,
+          city: formData.city || null,
+          gst_no: formData.gst_no || null,
+          outlet_id: selectedOutlet.id,
+        })
+        .select("id")
+        .single();
+        if(error) throw error;
+        customerId= newCustomer.id;
+    }
 
-      if (orderError) throw orderError;
+    // ------ Insert Order ------
+    const {data:createdOrder,error}= await supabase
+    .from("orders")
+    
+    .insert({ 
+      outlet_id: selectedOutlet.id,
+      order_number: `ORD-${Date.now()}`,
+      customer_id: customerId,
+      cake_size: formData.cake_size || null,
+      flavour: formData.flavour || null,
+      cake_description: formData.cake_description || null,
+      message_on_cake: formData.message_on_cake || null,
+      cake_color: formData.cake_color || null,
+      cake_photo_url: null,
+      occasion_type: formData.occasion_type || null,
+      occasion_date: formData.occasion_date || null,
+      other_menu: formData.other_menu || null,
+      delivery_date: formData.delivery_date,
+      delivery_address: formData.delivery_address || null,
+      delivery_city: formData.delivery_city || null,
+      delivery_charge: Number(formData.delivery_charge),
+      delivery_type: formData.delivery_type || null,
+      total_amount: Number(formData.total_amount),
+      tax_percentage: formData.tax_percentage,
+      tax_value: formData.tax_value,
+      discount_percentage: Number(formData.discount_percentage),
+      after_discount: formData.after_discount,
+      grand_total: formData.grand_total,
+      cash_payment: Number(formData.cash_payment),
+      credit_card_payment: Number(formData.credit_card_payment),
+      online_payment: Number(formData.online_payment),
+      free_bill: Number(formData.free_bill),
+      balance: formData.balance,
+      status: "Pending",
+    })
+    .select("*, customers(*)")
+    .single();
+    if(error) throw error;
 
-      toast.success("Order created successfully");
-      setFormData(initialFormData);
-      onOrderCreated();
-    } catch (err: any) {
+    // ------ Print Receipts ------
+    printHtml(billReceiptHTML(createdOrder));
+    printHtml(detailSlipHTML(createdOrder));
+
+    toast.success("Order created successfully and printed");
+    setFormData(initialFormData);
+    onOrderCreated?.();
+  }
+    catch(err:any){
       toast.error(err.message || "Failed to create order");
-    } finally {
+    }
+    finally
+    {
       setIsSubmitting(false);
     }
   };
+   
+  
+
+
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">

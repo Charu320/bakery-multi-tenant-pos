@@ -65,6 +65,7 @@ export const billReceiptHTML = (order: any) => `
 
   <!-- OUTLET -->
   <div class="center bold">${order.outlets?.name || "ROYAL LIVE BAKERY"}</div>
+    <div class="center bold">"ROYALLIVEFOODS PVT. LTD."</div>
   <div class="center small">
     ${order.outlets?.address || "-"}<br/>
     GST IN: ${order.outlets?.gst_no || "-"}<br/>
@@ -208,16 +209,16 @@ export const detailSlipHTML = (order: any) => `
 <body>
 
   <!-- LOGO -->
-  <div class="center">
-    <img src="@/assets/royal-logo.png" class="logo" />
-  </div>
+  // <div class="center">
+  //   <img src="@/assets/royal-logo.png" class="logo" />
+  // </div>
 
   <!-- OUTLET DETAILS -->
   <div class="center bold">ROYAL LIVE FOODS</div>
   <div class="center small">
     ${order.outlets?.address || "Outlet Address"}<br/>
-    GST: ${order.outlets?.gst_no || "-"}<br/>
-    Ph: ${order.outlets?.phone || "-"}
+    // GST: ${order.outlets?.gst_no || "-"}<br/>
+    Ph: ${order.outlets?.phone_no || "-"}
   </div>
 
   <div class="divider"></div>

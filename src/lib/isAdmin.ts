@@ -9,4 +9,7 @@ export const isAdmin = async (): Promise<boolean> => {
   if (!user || !user.email) return false;
 
   return ADMIN_EMAILS.includes(user.email);
+
+
+  
 };

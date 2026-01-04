@@ -5,6 +5,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/FormField";
 import { billReceiptHTML, detailSlipHTML } from "@/lib/receiptTemplate";
 import { printHtml } from "@/lib/print";
+import { useEffectiveOutlet } from "@/lib/useEffectiveOutlet";
+
 
 import {
   Select,
@@ -145,7 +147,11 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
   const [cakeImage, setCakeImage] = useState<File | null>(null);
   const [cakeImagePreview, setCakeImagePreview] = useState<string | null>(null);
   const { settings, loading: gstLoading } = useAppSettings();
-  const { selectedOutlet } = useAdminOutlet();
+  const { outletId, loading: outletLoading } = useEffectiveOutlet();
+
+
+
+  // const { selectedOutlet } = useAdminOutlet();
   /* ---------- INPUT HANDLERS ---------- */
 
   const handleInputChange = (
@@ -272,7 +278,7 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
 
     // Outlet check
 
-    if(!selectedOutlet?.id){
+    if(!outletId){
       toast.error("Please select an outlet before creating an order");
       return;
     }
@@ -298,7 +304,7 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
           address: formData.address || null,
           city: formData.city || null,
           gst_no: formData.gst_no || null,
-          outlet_id: selectedOutlet.id,
+          outlet_id: outletId,
         })
         .select("id")
         .single();
@@ -311,7 +317,7 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
     .from("orders")
     
     .insert({ 
-      outlet_id: selectedOutlet.id,
+      outlet_id: outletId,
       order_number: `ORD-${Date.now()}`,
       customer_id: customerId,
       cake_size: formData.cake_size || null,
@@ -367,7 +373,20 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
 
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <>
+    {outletLoading && (
+      <div className="p-6 text-muted-foreground">
+        Loading outlet...
+      </div>
+    )}
+    {!outletLoading && !outletId &&(
+      <div className="p-6 text-red-500">
+        Outlet not assigned. Please contact admin.
+      </div>
+    )
+    }
+    {!outletLoading && outletId && (
+   <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Customer & Cake Details */}
         <div className="space-y-6">
@@ -840,5 +859,7 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
         </div>
       </div>
     </form>
+    )}
+    </>
   );
 };

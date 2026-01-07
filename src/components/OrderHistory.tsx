@@ -30,12 +30,25 @@ import { printHtml } from "@/lib/print";
 import { billReceiptHTML, detailSlipHTML } from "@/lib/receiptTemplate";
 import { toast } from "sonner";
 import { Label } from "@radix-ui/react-label";
-import { AdminOutletProvider } from "@/context/AdminOutletContext";
+
 import { fetchOrdersByOutlet, AdminOrder } from "@/lib/fetchOutlets";
+import { useAdminOutlet } from "@/context/AdminOutletContext"
+
+
 
 export const getUserRole = async (): Promise<string | null> => {
-  const { data } = await supabaseClient.auth.getUser();
-  return data?.user?.user_metadata?.role ?? null;
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  if (!user) return null;
+  
+  // First try to get role from user_profiles (more reliable)
+  const { data: profile } = await supabaseClient
+    .from("user_profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  
+  // Fallback to user_metadata if profile doesn't exist
+  return profile?.role || user.user_metadata?.role || null;
 };
 
 interface Order {
@@ -121,50 +134,11 @@ export const OrderHistory = ({
   const [filterDate, setFilterDate] = useState<string>("");
   const [showUnpaidOnly, setShowUnpaidOnly] = useState(false);
   const [role, setRole] = useState<string | null>(null);
-
+  const {selectedOutlet}=useAdminOutlet();
+ 
   useEffect(() => {
     getUserRole().then(setRole);
   }, []);
-
-  useEffect(() => {
-    fetchOrders();
-  }, [refreshTrigger]);
-
-  const fetchOrders = async () => {
-    setLoading(true);
-    const { data, error } = await supabaseClient
-      .from("orders")
-      .select(
-        `
-  id,
-  order_number,
-  cake_size,
-  flavour,
-  delivery_date,
-
-  delivery_type,
-  delivery_address,
-  occasion_type,
-  occasion_date,
-  grand_total,
-  status,
-  balance,
-  created_at,
-  customers (
-    name,
-    phone_no,
-    city
-  )
-`
-      )
-
-      .order("created_at", { ascending: false });
-
-    if (!error && data) {
-      setOrders(data);
-    }
-    setLoading(false);
-  };
 
   const viewOrderDetails = async (orderId: string) => {
     setDetailLoading(true);
@@ -196,7 +170,7 @@ export const OrderHistory = ({
       toast.error("Failed to delete order");
     } else {
       toast.success("Order deleted successfully");
-      fetchOrders();
+      fetchOutletOrders();
       onOrderDeleted?.();
     }
     setDeletingId(null);
@@ -245,6 +219,78 @@ export const OrderHistory = ({
     }
   }, [showPendingOnly]);
 
+  const fetchOutletOrders = async () => {
+    setLoading(true);
+    let query = supabase.from("orders").select(
+      `   id,
+    order_number,
+    cake_size,
+    flavour,
+    delivery_date,
+    delivery_type,
+    delivery_address,
+    occasion_type,
+    occasion_date,
+    grand_total,
+    status,
+    balance,
+    created_at,
+    outlet_id,
+    customers (
+      name,
+      phone_no,
+      city
+    )`
+    );
+
+    if (role === "admin") {
+      if (!selectedOutlet) {
+        setLoading(false);
+        return;
+      }
+      query = query.eq("outlet_id", selectedOutlet.id); // ✅ ADMIN
+    } else {
+      // For manager/kitchen, get outlet_id from user_profiles table
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+      
+      const { data: profile, error: profileError } = await supabase
+        .from("user_profiles")
+        .select("outlet_id")
+        .eq("id", user.id)
+        .single();
+      
+      if (profileError || !profile?.outlet_id) {
+        setLoading(false);
+        toast.error("Outlet not assigned. Please contact admin.");
+        return;
+      }
+      
+      query = query.eq("outlet_id", profile.outlet_id); // ✅ MANAGER / KITCHEN
+    }
+
+    const { data, error } = await query.order("created_at", {
+      ascending: false,
+    });
+
+    if (error) {
+      toast.error("Failed to load orders");
+      console.error("Order fetch error:", error);
+    } else {
+      setOrders(data || []);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    if (role) {
+      fetchOutletOrders();
+    }
+  }, [selectedOutlet, role, refreshTrigger]);
+
   // 🔥 PIN TODAY’S DELIVERY ORDERS ON TOP
   const todayOrders = filteredOrders.filter((order) =>
     isTodayDelivery(order.delivery_date)
@@ -268,6 +314,36 @@ export const OrderHistory = ({
         return "bg-muted text-muted-foreground border-muted";
     }
   };
+
+const handlePrintSlip = (order: any) => {
+  if (!selectedOutlet) {
+    toast.error("Outlet not selected");
+    return;
+  }
+
+  printHtml(
+    detailSlipHTML({
+      ...order,
+      outlet: selectedOutlet,
+    })
+  );
+};
+
+const handlePrintBill = (order: any) => {
+  if (!selectedOutlet) {
+    toast.error("Outlet not selected");
+    return;
+  }
+
+  printHtml(
+    billReceiptHTML({
+      ...order,
+      outlet: selectedOutlet,   // 🔥 THIS BINDS OUTLET
+    })
+  );
+};
+
+
 
   return (
     <>
@@ -391,12 +467,7 @@ export const OrderHistory = ({
                             {order.order_number}
                           </span>
 
-                          {/* {isTodayDelivery(order.delivery_date) && (
-     <span className="bg-yellow-300 text-black text-xs font-bold px-3 py-1 rounded-sm rotate-[-2deg] shadow-md">
-  📌 TODAY
-</span>
-
-    )} */}
+                  
                         </div>
 
                         <div className="text-muted-foreground text-xs mt-1">
@@ -486,22 +557,21 @@ export const OrderHistory = ({
                             onClick={() => viewOrderDetails(order.id)}
                             className="text-gold hover:text-gold-light hover:bg-gold/10"
                           >
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => printHtml(billReceiptHTML(order))}
-                            >
-                              Print Bill
-                            </Button>
-
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => printHtml(detailSlipHTML(order))}
-                            >
-                              Print Slip
-                            </Button>
                             <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handlePrintBill(order)}
+                          >
+                            Bill
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handlePrintSlip(order)}
+                          >
+                            Slip
                           </Button>
                           {role === "admin" && (
                             <AlertDialog>

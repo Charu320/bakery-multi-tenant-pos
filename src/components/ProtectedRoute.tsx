@@ -6,18 +6,23 @@ type Role = "admin" | "manager" | "kitchen";
 
 interface Props {
   allow: Role[];
-  children: JSX.Element;
+  children: React.ReactNode;
 }
 
 export default function ProtectedRoute({ allow, children }: Props) {
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<Role | null>(null);
+  const [hasUser, setHasUser] = useState(false);
 
   useEffect(() => {
-    getCurrentUserProfile().then((profile) => {
-      setRole(profile?.role ?? null);
-      setLoading(false);
-    });
+    getCurrentUserProfile()
+      .then((profile) => {
+        if (profile) {
+          setHasUser(true);
+          setRole(profile.role as Role | null);
+        }
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) {
@@ -28,9 +33,17 @@ export default function ProtectedRoute({ allow, children }: Props) {
     );
   }
 
-  if (!role || !allow.includes(role)) {
+  // ❌ Not logged in
+  if (!hasUser) {
     return <Navigate to="/login" replace />;
   }
 
-  return children;
+  // ❌ Logged in but role not allowed
+  if (!role || !allow.includes(role)) {
+    return <Navigate to="/" replace />;
+  }
+
+  // ✅ Allowed
+  return <>{children}</>;
 }
+

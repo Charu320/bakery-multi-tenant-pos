@@ -20,9 +20,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Calendar, Cake, CreditCard, Truck, User } from "lucide-react";
 import { useAppSettings } from "../lib/useAppSettings";
-import { useAdminOutlet } from "@/lib/useAdminOutlet";
-import { useAdminOutletContext } from "@/context/AdminOutletContext";
-import { set } from "date-fns";
+import { useAdminOutlet } from "@/context/AdminOutletContext"
+import { create } from "node:domain";
+
 
 /* ================= TYPES ================= */
 
@@ -146,12 +146,43 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [cakeImage, setCakeImage] = useState<File | null>(null);
   const [cakeImagePreview, setCakeImagePreview] = useState<string | null>(null);
-  const { settings, loading: gstLoading } = useAppSettings();
   const { outletId, loading: outletLoading } = useEffectiveOutlet();
+  const { settings, loading: gstLoading } = useAppSettings(outletId);
 
 
 
-  // const { selectedOutlet } = useAdminOutlet();
+  const { selectedOutlet } = useAdminOutlet();
+  
+  /* ---------- PRINT HANDLERS ---------- */
+  
+  const handlePrintBill = (order: any) => {
+    if (!selectedOutlet) {
+      toast.error("Outlet not selected");
+      return;
+    }
+
+    printHtml(
+      billReceiptHTML({
+        ...order,
+        outlet: selectedOutlet,
+      })
+    );
+  };
+
+  const handlePrintSlip = (order: any) => {
+    if (!selectedOutlet) {
+      toast.error("Outlet not selected");
+      return;
+    }
+
+    printHtml(
+      detailSlipHTML({
+        ...order,
+        outlet: selectedOutlet,
+      })
+    );
+  };
+
   /* ---------- INPUT HANDLERS ---------- */
 
   const handleInputChange = (
@@ -345,15 +376,15 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
       online_payment: Number(formData.online_payment),
       free_bill: Number(formData.free_bill),
       balance: formData.balance,
-      status: "Pending",
+      status: "pending",
     })
     .select("*, customers(*)")
     .single();
     if(error) throw error;
 
     // ------ Print Receipts ------
-    printHtml(billReceiptHTML(createdOrder));
-    printHtml(detailSlipHTML(createdOrder));
+    handlePrintBill(createdOrder);
+    handlePrintSlip(createdOrder);
 
     toast.success("Order created successfully and printed");
     setFormData(initialFormData);

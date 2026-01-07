@@ -20,6 +20,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+      <AdminOutletProvider>
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<AuthForm onSuccess={() =>window.location.replace("/")}/>}  />
@@ -28,9 +29,9 @@ const App = () => (
         path="/admin"
         element={
           <ProtectedRoute allow={["admin"]}>
-            <AdminOutletProvider>
+            
            <AdminDashboard />
-           </AdminOutletProvider>
+          
           </ProtectedRoute>
         }
       />
@@ -38,8 +39,10 @@ const App = () => (
       <Route
         path="/orders"
         element={
-          <ProtectedRoute allow={["admin", "manager", "kitchen"]}>
+          <ProtectedRoute allow={["admin", "manager"]}>
+        
             <OrderForm />
+            
           </ProtectedRoute>
         }
         />
@@ -48,12 +51,15 @@ const App = () => (
         path="/kitchen"
         element={
           <ProtectedRoute allow={["admin", "manager", "kitchen"]}>
+           
             <KitchenOrderScreen />
+           
           </ProtectedRoute>
         }
         />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </AdminOutletProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

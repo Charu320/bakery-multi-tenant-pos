@@ -6,7 +6,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAdminOutlet } from "@/lib/useAdminOutlet";
+import { useAdminOutlet } from "@/context/AdminOutletContext";
+
 
 
 
@@ -16,7 +17,7 @@ const AdminDashboardHeader = () => {
   const {
     outlets,
     selectedOutlet,
-    setSelectedOutlet,
+    setOutlet,
     loading,
   } = useAdminOutlet();
 console.log("OUTLETS:", outlets);
@@ -54,10 +55,10 @@ console.log("SELECTED OUTLET:", selectedOutlet);
       {/* RIGHT: OUTLET SWITCHER */}
       <div className="w-full sm:w-72">
         <Select
-          value={selectedOutlet?.id}
+          value={selectedOutlet?.id || ""}
           onValueChange={(outletId) => {
             const outlet = outlets.find((o) => o.id === outletId);
-            if (outlet) setSelectedOutlet(outlet);
+            if (outlet) setOutlet(outlet);
           }}
         >
           <SelectTrigger className="bg-secondary border-border text-foreground">

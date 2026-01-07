@@ -37,17 +37,16 @@ import {
 import KitchenOrderScreen from "./KitchenOrderScreen";
 import { OrderHistory } from "./OrderHistory";
 import { Database } from "@/integrations/supabase/types";
-import { useAdminOutlet } from "@/lib/useAdminOutlet";
-import { AdminOutletProvider } from "@/context/AdminOutletContext";
+import { useAdminOutlet } from "@/context/AdminOutletContext"
 /* ================= TYPES ================= */
 
 type AppSettings = {
-  key: string;
   id: string;
-  value: string;
-  updated_at: string;
   gst_enabled: boolean;
   gst_percentage: number;
+  outlet_id: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 type SalesSummary = {
@@ -87,7 +86,8 @@ const AdminDashboard = () => {
   const [salesByPeriod, setSalesByPeriod] = useState<SalesData[]>([]);
   const [timePeriod, setTimePeriod] = useState<TimePeriod>("daily");
   const [loading, setLoading] = useState(false);
-
+  const [orderHistoryKey, setOrderHistoryKey] = useState(0);
+  const {selectedOutlet}=useAdminOutlet();
 // -- AUTH CHECK ---------- */
 
 
@@ -120,69 +120,132 @@ const AdminDashboard = () => {
   /* ---------- FETCH APP SETTINGS ---------- */
 
   const fetchSettings = async () => {
-    const { data, error } = await supabase
-      .from("app_settings")
-      .select("*")
-      .single();
+    if (!selectedOutlet) return;
 
-    if (error) {
-      console.error(error);
-      toast.error("Failed to load GST settings");
-      return;
+    try {
+      const { data, error } = await supabase
+        .from("app_settings")
+        .select("*")
+        .eq("outlet_id", selectedOutlet.id)
+        .maybeSingle();
+
+      // Log error for debugging
+      if (error) {
+        console.log("AdminDashboard GST fetch error:", {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+      }
+
+      // Check if error is due to missing column (migration not run)
+      // Common error messages: "column ... does not exist", PostgreSQL error code 42703
+      const isColumnError = error && (
+        error.code === "42703" ||
+        error.code === "PGRST204" || // PostgREST error for missing column
+        (error.message && (
+          error.message.toLowerCase().includes("column") && 
+          (error.message.toLowerCase().includes("outlet_id") || 
+           error.message.toLowerCase().includes("does not exist") ||
+           error.message.toLowerCase().includes("app_settings.outlet_id"))
+        )) ||
+        error.message?.includes("Could not find a relationship") ||
+        (error.details && error.details.toLowerCase().includes("outlet_id"))
+      );
+
+      if (isColumnError) {
+        console.warn("outlet_id column not found, falling back to global settings");
+        // Fallback to global settings
+        const { data: globalData, error: globalError } = await supabase
+          .from("app_settings")
+          .select("*")
+          .limit(1)
+          .maybeSingle();
+
+        if (globalError && globalError.code !== "PGRST116") {
+          console.error("GST fetch error:", globalError);
+          toast.error("Failed to load GST settings: " + (globalError.message || "Unknown error"));
+          return;
+        }
+
+        if (globalData) {
+          setSettings(globalData as AppSettings);
+          return;
+        }
+      }
+
+      if (error && error.code !== "PGRST116") {
+        console.error("GST fetch error:", error);
+        toast.error("Failed to load GST settings: " + (error.message || "Unknown error"));
+        return;
+      }
+
+      // If no settings exist for this outlet, create default
+      if (!data) {
+        const { data: inserted, error: insertError } = await supabase
+          .from("app_settings")
+          .insert({
+            gst_enabled: true,
+            gst_percentage: 5,
+            outlet_id: selectedOutlet.id,
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          // If insert fails due to missing column, try without outlet_id
+          const isInsertColumnError = insertError.code === "42703" ||
+            (insertError.message && (
+              insertError.message.toLowerCase().includes("column") && 
+              (insertError.message.toLowerCase().includes("outlet_id") || 
+               insertError.message.toLowerCase().includes("does not exist"))
+            )) ||
+            insertError.message?.includes("Could not find a relationship");
+
+          if (isInsertColumnError) {
+            const { data: fallbackInsert, error: fallbackError } = await supabase
+              .from("app_settings")
+              .insert({
+                gst_enabled: true,
+                gst_percentage: 5,
+              })
+              .select()
+              .single();
+
+            if (fallbackError) {
+              console.error("Failed to create GST settings:", fallbackError);
+              toast.error("Failed to initialize GST settings");
+              return;
+            }
+
+            setSettings(fallbackInsert as AppSettings);
+            return;
+          }
+
+          console.error("Failed to create GST settings:", insertError);
+          toast.error("Failed to initialize GST settings: " + (insertError.message || "Unknown error"));
+          return;
+        }
+
+        setSettings(inserted as AppSettings);
+        return;
+      }
+
+      setSettings(data as AppSettings);
+    } catch (err: any) {
+      console.error("Unexpected error fetching GST settings:", err);
+      toast.error("Failed to load GST settings: " + (err.message || "Unknown error"));
     }
-
-    setSettings(data as AppSettings);
   };
 
-  /* ---------- FETCH SALES REPORT ---------- */
+  /* ---------- GET WEEK START DATE ---------- */
 
-  const fetchSalesReport = async () => {
-    const { data, error } = await supabase
-      .from("orders")
-      .select("grand_total, tax_value")
-      .eq("status", "delivered");
-
-    if (error) {
-      toast.error("Failed to load sales report");
-      return;
-    }
-
-    const totalSales = data.reduce(
-      (sum, o) => sum + (o.grand_total || 0),
-      0
-    );
-    const gstCollected = data.reduce(
-      (sum, o) => sum + (o.tax_value || 0),
-      0
-    );
-
-    setSales({
-      totalSales,
-      gstCollected,
-      totalOrders: data.length,
-    });
-  };
-
-  /* ---------- FETCH SALES BY TIME PERIOD ---------- */
-
-  const fetchSalesByPeriod = async (period: TimePeriod) => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("orders")
-      .select("grand_total, tax_value, delivery_date")
-      .eq("status", "delivered")
-      .order("delivery_date", { ascending: true });
-
-    if (error) {
-      toast.error("Failed to load sales data");
-      setLoading(false);
-      return;
-    }
-
-    // Group data by selected time period
-    const grouped = groupSalesByPeriod(data, period);
-    setSalesByPeriod(grouped);
-    setLoading(false);
+  const getWeekStart = (date: Date): Date => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust to start from Monday
+    return new Date(d.setDate(diff));
   };
 
   /* ---------- GROUP SALES BY TIME PERIOD ---------- */
@@ -258,56 +321,127 @@ const AdminDashboard = () => {
     });
   };
 
-  /* ---------- GET WEEK START DATE ---------- */
+  /* ---------- FETCH SALES REPORT ---------- */
 
-  const getWeekStart = (date: Date): Date => {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust to start from Monday
-    return new Date(d.setDate(diff));
+  const fetchSalesReport = async () => {
+    if (!selectedOutlet) return;
+    
+    const { data, error } = await supabase
+      .from("orders")
+      .select("grand_total, tax_value")
+      .eq("status", "delivered")
+      .eq("outlet_id", selectedOutlet.id);
+
+    if (error) {
+      toast.error("Failed to load sales report");
+      return;
+    }
+
+    const totalSales = data.reduce(
+      (sum, o) => sum + (o.grand_total || 0),
+      0
+    );
+    const gstCollected = data.reduce(
+      (sum, o) => sum + (o.tax_value || 0),
+      0
+    );
+
+    setSales({
+      totalSales,
+      gstCollected,
+      totalOrders: data.length,
+    });
   };
 
-  // 
-  
+  /* ---------- FETCH SALES BY TIME PERIOD ---------- */
+
+  const fetchSalesByPeriod = async (period: TimePeriod) => {
+    if (!selectedOutlet) return;
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("orders")
+      .select("grand_total, tax_value, delivery_date")
+      .eq("status", "delivered")
+      .eq("outlet_id", selectedOutlet.id)
+      .order("delivery_date", { ascending: true });
+
+    if (error) {
+      toast.error("Failed to load sales data");
+      setLoading(false);
+      return;
+    }
+
+    // Group data by selected time period
+    const grouped = groupSalesByPeriod(data, period);
+    setSalesByPeriod(grouped);
+    setLoading(false);
+  };
 
   /* ---------- UPDATE GST SETTINGS (SAFE) ---------- */
 
   const updateSettings = async (updates: Partial<AppSettings>) => {
-    if (!settings?.id) {
-      toast.error("Settings not loaded");
+    if (!selectedOutlet) {
+      toast.error("Please select an outlet");
       return;
-    };
+    }
+
+    if (!settings?.id) {
+      // Create new settings if they don't exist
+      const { data: inserted, error: insertError } = await supabase
+        .from("app_settings")
+        .insert({
+          gst_enabled: updates.gst_enabled ?? true,
+          gst_percentage: updates.gst_percentage ?? 5,
+          outlet_id: selectedOutlet.id,
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        toast.error(insertError.message);
+        return;
+      }
+
+      toast.success("Settings created");
+      setSettings(inserted as AppSettings);
+      return;
+    }
+
     setLoading(true);
     const { error } = await supabase
       .from("app_settings")
       .update(updates)
-      .eq("id", settings.id);
+      .eq("id", settings.id)
+      .eq("outlet_id", selectedOutlet.id); // Ensure we're updating the correct outlet
 
     if (error) {
       toast.error(error.message);
     } else {
-      toast.success("Settings updated");
+      toast.success("Settings updated for " + selectedOutlet.name);
       setSettings({...settings, ...updates} as AppSettings);
     }
+    setLoading(false);
   };
 
   /* ---------- INIT ---------- */
 
   useEffect(() => {
-    if (role === "admin") {
+    if (role === "admin" && selectedOutlet) {
       fetchSettings();
       fetchSalesReport();
       fetchSalesByPeriod(timePeriod);
+      // Force OrderHistory to refresh when outlet changes
+      setOrderHistoryKey(prev => prev + 1);
     }
-  }, [role]);
+  }, [role, selectedOutlet?.id]); // Use selectedOutlet.id to refetch when outlet changes
 
   /* ---------- REFETCH ON PERIOD CHANGE ---------- */
 
   useEffect(() => {
-    if (role === "admin") {
+    if (role === "admin" && selectedOutlet) {
       fetchSalesByPeriod(timePeriod);
     }
-  }, [timePeriod]);
+  }, [timePeriod, selectedOutlet]);
 
   /* ---------- BLOCK RENDER UNTIL AUTH ---------- */
 
@@ -318,11 +452,9 @@ const AdminDashboard = () => {
       </div>
     );
   }
-
   /* ================= UI ================= */
 
   return (
-    <AdminOutletProvider>
     <div className="p-6 space-y-6">
      <AdminDashboardHeader/>
 
@@ -440,7 +572,11 @@ const AdminDashboard = () => {
 
         {/* ---------- GST ---------- */}
         <TabsContent value="gst">
-          {!settings ? (
+          {!selectedOutlet ? (
+            <div className="mt-6 text-muted-foreground">
+              Please select an outlet to configure GST settings
+            </div>
+          ) : !settings ? (
             <div className="mt-6 text-muted-foreground">
               Loading GST settings...
             </div>
@@ -448,6 +584,9 @@ const AdminDashboard = () => {
             <Card className="mt-6 max-w-xl">
               <CardHeader>
                 <CardTitle>GST Configuration</CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Settings for <span className="text-gold font-medium">{selectedOutlet.name}</span>
+                </p>
               </CardHeader>
 
               <CardContent className="space-y-6">
@@ -493,12 +632,14 @@ const AdminDashboard = () => {
 
         {/* ---------- HISTORY ---------- */}
         <TabsContent value="history">
-          <OrderHistory refreshTrigger={0} />
+          <OrderHistory 
+            refreshTrigger={orderHistoryKey} 
+            key={`${selectedOutlet?.id || "no-outlet"}-${orderHistoryKey}`}
+          />
         </TabsContent>
       </Tabs>
      
     </div>
-    </AdminOutletProvider>
   );
 };
 

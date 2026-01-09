@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/FormField";
 import { billReceiptHTML, detailSlipHTML } from "@/lib/receiptTemplate";
 import { printHtml } from "@/lib/print";
@@ -21,7 +20,8 @@ import { toast } from "sonner";
 import { Calendar, Cake, CreditCard, Truck, User } from "lucide-react";
 import { useAppSettings } from "../lib/useAppSettings";
 import { useAdminOutlet } from "@/context/AdminOutletContext"
-import { create } from "node:domain";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { saveOfflineOrder } from "@/lib/offlineStorage";
 
 
 /* ================= TYPES ================= */
@@ -122,16 +122,6 @@ const occasionTypes = [
   "Other",
 ];
 
-const flavours = [
-  "Chocolate",
-  "Vanilla",
-  "Butterscotch",
-  "Red Velvet",
-  "Black Forest",
-  "Pineapple",
-  "Strawberry",
-  "Blueberry",
-];
 
 interface OrderFormProps {
   onOrderCreated?: () => void;
@@ -148,8 +138,7 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
   const [cakeImagePreview, setCakeImagePreview] = useState<string | null>(null);
   const { outletId, loading: outletLoading } = useEffectiveOutlet();
   const { settings, loading: gstLoading } = useAppSettings(outletId);
-
-
+  const isOnline = useOnlineStatus();
 
   const { selectedOutlet } = useAdminOutlet();
   
@@ -202,14 +191,7 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSameAddressChange = (checked: boolean) => {
-    setFormData((prev) => ({
-      ...prev,
-      same_as_customer_address: checked,
-      delivery_address: checked ? prev.address : prev.delivery_address,
-      delivery_city: checked ? prev.city : prev.delivery_city,
-    }));
-  };
+  
 
   /* ---------- CALCULATIONS ---------- */
 
@@ -227,8 +209,14 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
       taxPercent = settings.gst_percentage;
     }
 
-    const taxValue = afterDiscount * (formData.tax_percentage / 100);
-    const grandTotal = afterDiscount + taxValue;
+      let gstValue = 0;
+  let baseAmount = total;
+
+  if (taxPercent > 0 && total > 0) {
+    gstValue = (total * taxPercent) / (100);
+    gstValue = Math.round(gstValue); // 🔥 rounded GST
+    baseAmount = total - gstValue;
+  }
 
     const totalPaid =
       Number(formData.cash_payment || 0) +
@@ -240,9 +228,9 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
       ...prev,
       tax_percentage: taxPercent,
       after_discount: afterDiscount,
-      tax_value: taxValue,
-      grand_total: grandTotal,
-      balance: grandTotal - totalPaid,
+      tax_value: gstValue,
+      grand_total: total,
+      balance: total - totalPaid,
     }));
   }, [
     formData.total_amount,
@@ -274,124 +262,249 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-  //  validation
+    //  validation
     if (!validateForm()) return;
 
-    const { data: auth } = await supabase.auth.getUser();
-
-    // Auth check
-
-    if (!auth.user) {
-      toast.error("You must be logged in to upload images");
-      setIsSubmitting(false);
-      return;
-    }
-
-    // cake
-      let cakePhotoUrl: string | null = null;
-
-    if (cakeImage) {
-      const fileExt = cakeImage.name.split(".").pop();
-      const fileName = `cake-${Date.now()}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("cake-images")
-        .upload(fileName, cakeImage);
-
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage
-        .from("cake-images")
-        .getPublicUrl(fileName);
-
-      cakePhotoUrl = data.publicUrl;
-    }
-
     // Outlet check
-
     if(!outletId){
       toast.error("Please select an outlet before creating an order");
       return;
     }
+
+    // Auth check - use getSession() for offline support (reads from localStorage)
+    // getSession() works offline, getUser() requires network
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      toast.error("You must be logged in to create orders");
+      return;
+    }
+
     setIsSubmitting(true);
 
-    try{
+    try {
+      // Generate order number (same format whether online or offline)
+      // Add random component to avoid collisions
+      const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+      const createdAt = new Date().toISOString();
+
+      // Check if we're offline
+      if (!isOnline) {
+        // OFFLINE MODE: Save locally and print immediately
+        
+        // Prepare order data for offline storage
+        const offlineOrderData = {
+          outlet_id: outletId,
+          order_number: orderNumber,
+          formData: formData,
+          customerData: {
+            phone_no: formData.phone_no,
+            name: formData.name,
+            email: formData.email || undefined,
+            address: formData.address || undefined,
+            city: formData.city || undefined,
+            gst_no: formData.gst_no || undefined,
+            isNew: true, // We'll check when syncing
+          },
+          cakeImage: cakeImage
+            ? {
+                file: cakeImage,
+              }
+            : undefined,
+        };
+
+        // Save to offline storage
+        await saveOfflineOrder(offlineOrderData);
+
+        // Create a mock order object for printing (works offline)
+        const mockOrder = {
+          id: `offline-${Date.now()}`,
+          outlet_id: outletId,
+          order_number: orderNumber,
+          created_at: createdAt,
+          ...formData,
+          customers: {
+            phone_no: formData.phone_no,
+            name: formData.name,
+            email: formData.email || null,
+            address: formData.address || null,
+            city: formData.city || null,
+            gst_no: formData.gst_no || null,
+          },
+        };
+
+        // Print receipts immediately (works offline - uses local HTML)
+        // handlePrintBill({ ...mockOrder, outlet: selectedOutlet });
+        handlePrintSlip({ ...mockOrder, outlet: selectedOutlet });
+
+        toast.success("Saved offline. Will sync when internet is back");
+        setFormData(initialFormData);
+        setCakeImage(null);
+        setCakeImagePreview(null);
+        onOrderCreated?.();
+        setIsSubmitting(false);
+        return;
+      }
+
+      // ONLINE MODE: Normal flow
+      
+      // Handle cake image upload
+      let cakePhotoUrl: string | null = null;
+
+      if (cakeImage) {
+        const fileExt = cakeImage.name.split(".").pop();
+        const fileName = `cake-${Date.now()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("cake-images")
+          .upload(fileName, cakeImage);
+
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage
+          .from("cake-images")
+          .getPublicUrl(fileName);
+
+        cakePhotoUrl = data.publicUrl;
+      }
+
+      // Handle customer (find or create)
       const {data: existingCustomer}= await supabase
-      .from("customers")
-      .select("id")
-      .eq("phone_no", formData.phone_no)
-      .maybeSingle();
+        .from("customers")
+        .select("id")
+        .eq("phone_no", formData.phone_no)
+        .eq("outlet_id", outletId) // CRITICAL: Filter by outlet_id
+        .maybeSingle();
 
       let customerId: string;
       if(existingCustomer){
         customerId= existingCustomer.id;
       }else{
         const {data: newCustomer, error}= await supabase
-        .from("customers")
-        .insert({
-          phone_no: formData.phone_no,
-          name: formData.name,
-          email: formData.email || null,
-          address: formData.address || null,
-          city: formData.city || null,
-          gst_no: formData.gst_no || null,
-          outlet_id: outletId,
-        })
-        .select("id")
-        .single();
+          .from("customers")
+          .insert({
+            phone_no: formData.phone_no,
+            name: formData.name,
+            email: formData.email || null,
+            address: formData.address || null,
+            city: formData.city || null,
+            gst_no: formData.gst_no || null,
+            outlet_id: outletId, // CRITICAL: Preserve outlet_id
+          })
+          .select("id")
+          .single();
         if(error) throw error;
         customerId= newCustomer.id;
+      }
+
+      // ------ Insert Order ------
+      const {data:createdOrder,error}= await supabase
+        .from("orders")
+        .insert({ 
+          outlet_id: outletId,
+          order_number: orderNumber,
+          customer_id: customerId,
+          cake_size: formData.cake_size || null,
+          flavour: formData.flavour || null,
+          cake_description: formData.cake_description || null,
+          message_on_cake: formData.message_on_cake || null,
+          cake_color: formData.cake_color || null,
+          cake_photo_url: cakePhotoUrl,
+          occasion_type: formData.occasion_type || null,
+          occasion_date: formData.occasion_date || null,
+          other_menu: formData.other_menu || null,
+          delivery_date: formData.delivery_date,
+          delivery_address: formData.delivery_address || null,
+          delivery_city: formData.delivery_city || null,
+          delivery_charge: Number(formData.delivery_charge) || 0,
+          delivery_type: formData.delivery_type || null,
+          total_amount: Number(formData.total_amount) || 0,
+          tax_percentage: formData.tax_percentage || 0,
+          tax_value: formData.tax_value || 0,
+          discount_percentage: Number(formData.discount_percentage) || 0,
+          after_discount: formData.after_discount || 0,
+          grand_total: formData.grand_total || 0,
+          cash_payment: Number(formData.cash_payment) || 0,
+          credit_card_payment: Number(formData.credit_card_payment) || 0,
+          online_payment: Number(formData.online_payment) || 0,
+          free_bill: Number(formData.free_bill) || 0,
+          balance: formData.balance || 0,
+          status: "pending",
+        })
+        .select("*, customers(*)")
+        .single();
+      
+      if(error) throw error;
+
+      // ------ Print Receipts ------
+      // handlePrintBill(createdOrder);
+      handlePrintSlip(createdOrder);
+
+      toast.success("Order created successfully and printed");
+      setFormData(initialFormData);
+      setCakeImage(null);
+      setCakeImagePreview(null);
+      onOrderCreated?.();
     }
-
-    // ------ Insert Order ------
-    const {data:createdOrder,error}= await supabase
-    .from("orders")
-    
-    .insert({ 
-      outlet_id: outletId,
-      order_number: `ORD-${Date.now()}`,
-      customer_id: customerId,
-      cake_size: formData.cake_size || null,
-      flavour: formData.flavour || null,
-      cake_description: formData.cake_description || null,
-      message_on_cake: formData.message_on_cake || null,
-      cake_color: formData.cake_color || null,
-      cake_photo_url: null,
-      occasion_type: formData.occasion_type || null,
-      occasion_date: formData.occasion_date || null,
-      other_menu: formData.other_menu || null,
-      delivery_date: formData.delivery_date,
-      delivery_address: formData.delivery_address || null,
-      delivery_city: formData.delivery_city || null,
-      delivery_charge: Number(formData.delivery_charge),
-      delivery_type: formData.delivery_type || null,
-      total_amount: Number(formData.total_amount),
-      tax_percentage: formData.tax_percentage,
-      tax_value: formData.tax_value,
-      discount_percentage: Number(formData.discount_percentage),
-      after_discount: formData.after_discount,
-      grand_total: formData.grand_total,
-      cash_payment: Number(formData.cash_payment),
-      credit_card_payment: Number(formData.credit_card_payment),
-      online_payment: Number(formData.online_payment),
-      free_bill: Number(formData.free_bill),
-      balance: formData.balance,
-      status: "pending",
-    })
-    .select("*, customers(*)")
-    .single();
-    if(error) throw error;
-
-    // ------ Print Receipts ------
-    handlePrintBill(createdOrder);
-    handlePrintSlip(createdOrder);
-
-    toast.success("Order created successfully and printed");
-    setFormData(initialFormData);
-    onOrderCreated?.();
-  }
     catch(err:any){
-      toast.error(err.message || "Failed to create order");
+      // If error occurs and we're offline, try to save offline
+      if (!isOnline || err.message?.includes("network") || err.message?.includes("fetch")) {
+        try {
+          const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+          const createdAt = new Date().toISOString();
+          
+          const offlineOrderData = {
+            outlet_id: outletId!,
+            order_number: orderNumber,
+            formData: formData,
+            customerData: {
+              phone_no: formData.phone_no,
+              name: formData.name,
+              email: formData.email || undefined,
+              address: formData.address || undefined,
+              city: formData.city || undefined,
+              gst_no: formData.gst_no || undefined,
+              isNew: true,
+            },
+            cakeImage: cakeImage
+              ? {
+                  file: cakeImage,
+                }
+              : undefined,
+          };
+
+          await saveOfflineOrder(offlineOrderData);
+
+          // Create mock order for printing
+          const mockOrder = {
+            id: `offline-${Date.now()}`,
+            outlet_id: outletId!,
+            order_number: orderNumber,
+            created_at: createdAt,
+            ...formData,
+            customers: {
+              phone_no: formData.phone_no,
+              name: formData.name,
+              email: formData.email || null,
+              address: formData.address || null,
+              city: formData.city || null,
+              gst_no: formData.gst_no || null,
+            },
+          };
+
+          // handlePrintBill({ ...mockOrder, outlet: selectedOutlet });
+          handlePrintSlip({ ...mockOrder, outlet: selectedOutlet });
+
+          toast.success("Saved offline. Will sync when internet is back");
+          setFormData(initialFormData);
+          setCakeImage(null);
+          setCakeImagePreview(null);
+          onOrderCreated?.();
+        } catch (offlineError) {
+          toast.error("Failed to create order. Please check your connection and try again.");
+        }
+      } else {
+        toast.error(err.message || "Failed to create order");
+      }
     }
     finally
     {
@@ -456,21 +569,6 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
                 value={formData.email}
                 onChange={handleInputChange}
               />
-              <FormField
-                label="Address"
-                name="address"
-                value={formData.address}
-                onChange={handleInputChange}
-                textarea
-                required
-              />
-              <FormField
-                label="City"
-                name="city"
-                value={formData.city}
-                onChange={handleInputChange}
-                required
-              />
             </CardContent>
           </Card>
 
@@ -492,32 +590,19 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-gold-light text-sm font-medium">
-                  Flavour
-                </Label>
-                <Select
-                  value={formData.flavour}
-                  onValueChange={(v) => handleSelectChange("flavour", v)}
-                  required
-                >
-                  <SelectTrigger className="bg-secondary border-border text-foreground">
-                    <SelectValue placeholder="Select flavour" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {flavours.map((flavour) => (
-                      <SelectItem key={flavour} value={flavour}>
-                        {flavour}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <FormField
+                label="Flavours"
+                name="flavour"
+                value={formData.flavour}
+                onChange={handleInputChange}
+                required
+              />
               </div>
               <FormField
                 label="Cake Description"
                 name="cake_description"
                 value={formData.cake_description}
                 onChange={handleInputChange}
-                textarea
                 required
               />
               <FormField
@@ -579,20 +664,7 @@ export const OrderForm = ({ onOrderCreated }: OrderFormProps) => {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="same_address"
-                  checked={formData.same_as_customer_address}
-                  onCheckedChange={handleSameAddressChange}
-                  className="border-gold data-[state=checked]:bg-gold data-[state=checked]:text-background"
-                />
-                <Label
-                  htmlFor="same_address"
-                  className="text-muted-foreground text-sm"
-                >
-                  Same as Customer Address
-                </Label>
-              </div>
+           
               <FormField
                 label="Delivery Address"
                 name="delivery_address"

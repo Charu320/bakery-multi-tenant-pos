@@ -10,7 +10,7 @@ import { Input } from "./ui/input";
 import { useRef } from "react";
 import { useEffectiveOutlet } from "@/lib/useEffectiveOutlet";
 
-type OrderStatus = "created" | "pending" | "delivered" | "cancelled" | "unpaid";
+type OrderStatus = "created" | "pending" | "delivered" | "cancelled" | "unpaid" | "prepared";
 
 interface KitchenOrder {
   id: string;
@@ -335,9 +335,9 @@ useEffect(() => {
                   {order.status === "pending" && (
                     <Button
                       className="w-full bg-green-600 hover:bg-green-700"
-                      onClick={() => updateOrderStatus(order.id, "delivered")}
+                      onClick={() => updateOrderStatus(order.id, "prepared")}
                     >
-                      Mark Delivered
+                      Mark Prepared
                     </Button>
                   )}
                   <Button

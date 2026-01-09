@@ -304,8 +304,11 @@ export const OrderHistory = ({
 
   const getStatusColor = (status: string | null) => {
     switch (status) {
+      case "delivered":
       case "completed":
         return "bg-green-500/20 text-green-400 border-green-500/30";
+      case "prepared":
+        return "bg-blue-500/20 text-blue-400 border-blue-500/30";
       case "pending":
         return "bg-gold/20 text-gold border-gold/30";
       case "cancelled":
@@ -342,6 +345,20 @@ const handlePrintBill = (order: any) => {
     })
   );
 };
+
+const handleMarkDelivered = async (orderId: string) => {
+    const { error } = await supabaseClient
+      .from("orders")
+      .update({ status: "delivered" })
+      .eq("id", orderId);
+
+    if (error) {
+      toast.error("Failed to update order status");
+    } else {
+      toast.success("Order marked as delivered");
+      fetchOutletOrders();
+    }
+  };
 
 
 
@@ -456,7 +473,7 @@ const handlePrintBill = (order: any) => {
                       className={`border-b transition-colors ${
                         (order as any).balance > 0 &&
                         order.status !== "cancelled"
-                          ? "blink-unpaid"
+                          ? "unpaid-blink"
                           : "border-border/50 hover:bg-secondary/20"
                       }`}
                       style={{ animationDelay: `${index * 50}ms` }}
@@ -573,6 +590,15 @@ const handlePrintBill = (order: any) => {
                           >
                             Slip
                           </Button>
+                          {(role === "admin" || role === "manager") && order.status === "prepared" && (
+                            <Button
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700 text-white border-none"
+                              onClick={() => handleMarkDelivered(order.id)}
+                            >
+                              Mark Delivered
+                            </Button>
+                          )}
                           {role === "admin" && (
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
@@ -630,7 +656,7 @@ const handlePrintBill = (order: any) => {
             selectedOrder &&
             (selectedOrder as any).balance > 0 &&
             selectedOrder.status !== "cancelled"
-              ? "blink-unpaid"
+              ? "unpaid-blink"
               : ""
           }`}
         >

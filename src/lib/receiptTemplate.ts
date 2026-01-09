@@ -30,15 +30,15 @@ export const billReceiptHTML = (order: any) => {
   <style>
     body {
       font-family: monospace;
-      font-size: 30px;   /* 🔥 INCREASED 3x */
+      font-size: 23px;
       margin: 0;
       padding: 20px;
       width: 380px;
     }
 
     .center { text-align: center; }
-    .bold { font-weight: bold; }
-    .small { font-size: 32px; }
+    .bold { font-weight: bold; font-size:28px; }
+    .small { font-size: 26px; }
 
     .divider {
       border-top: 2px dashed #000;
@@ -144,16 +144,16 @@ export const detailSlipHTML = (order: any) => {
   <style>
     body {
       font-family: monospace;
-      font-size: 30px;   /* 🔥 MUCH LARGER */
+      font-size: 23px;   /* 🔥 MUCH LARGER */
       padding: 20px;
       width: 380px;
     }
 
     .center { text-align: center; }
-    .bold { font-weight: bold; }
+    .bold { font-weight: bold; font-size:28px; }
     .divider { border-top: 2px dashed #000; margin: 12px 0; }
     .row { display: flex; justify-content: space-between; }
-    .small { font-size: 34px; }
+    .small { font-size: 26px; }
 
     img.logo { max-width: 200px; margin-bottom: 10px; }
   </style>

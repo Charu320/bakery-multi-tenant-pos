@@ -11,6 +11,7 @@ import { AuthForm } from "./components/AuthForm";
 import KitchenOrderScreen from "./components/KitchenOrderScreen";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { OrderForm } from "./components/OrderForm";
+import { Footer } from "./components/Footer";
 import { AdminOutletProvider } from "./context/AdminOutletContext";
 import { startAutoSync } from "./lib/syncService";
 
@@ -30,44 +31,49 @@ const App = () => {
         <Sonner />
         <BrowserRouter>
         <AdminOutletProvider>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/login" element={<AuthForm onSuccess={() =>window.location.replace("/")}/>}  />
-{/* Admin Only */}
-              <Route
-          path="/admin"
-          element={
-            <ProtectedRoute allow={["admin"]}>
-              
-             <AdminDashboard />
-            
-            </ProtectedRoute>
-          }
-        />
-        {/* Admin + Manager */}
-        <Route
-          path="/orders"
-          element={
-            <ProtectedRoute allow={["admin", "manager"]}>
-          
-              <OrderForm />
-              
-            </ProtectedRoute>
-          }
-          />
-          {/* Admin + Manager + Kitchen */}
-        <Route
-          path="/kitchen"
-          element={
-            <ProtectedRoute allow={["admin", "manager", "kitchen"]}>
-             
-              <KitchenOrderScreen />
-             
-            </ProtectedRoute>
-          }
-          />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+            <div className="flex flex-col min-h-screen">
+              <div className="flex-grow">
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/login" element={<AuthForm onSuccess={() => window.location.replace("/")} />} />
+                  {/* Admin Only */}
+                  <Route
+                    path="/admin"
+                    element={
+                      <ProtectedRoute allow={["admin"]}>
+
+                        <AdminDashboard />
+
+                      </ProtectedRoute>
+                    }
+                  />
+                  {/* Admin + Manager */}
+                  <Route
+                    path="/orders"
+                    element={
+                      <ProtectedRoute allow={["admin", "manager"]}>
+
+                        <OrderForm />
+
+                      </ProtectedRoute>
+                    }
+                  />
+                  {/* Admin + Manager + Kitchen */}
+                  <Route
+                    path="/kitchen"
+                    element={
+                      <ProtectedRoute allow={["admin", "manager", "kitchen"]}>
+
+                        <KitchenOrderScreen />
+
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </div>
+              <Footer />
+            </div>
           </AdminOutletProvider>
         </BrowserRouter>
       </TooltipProvider>
